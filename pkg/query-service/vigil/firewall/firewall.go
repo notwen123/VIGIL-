@@ -274,6 +274,11 @@ func (f *Firewall) Check(ctx context.Context, c Call) Result {
 	// known to be a repeat offender is stopped here, and the expensive
 	// stages never run at all — which is the whole efficiency argument for
 	// remembering rather than re-deriving.
+	// ===== DELETION TEST: MEMORY READ PATH — BEGIN =====================
+	// Comment out to this block's END marker to sever the read half of the
+	// memory layer. The build stays green and a known-bad agent walks
+	// straight through. See MEMORY.md §3. (Runtime equivalent, no rebuild:
+	// VIGIL_SIBYL_DISABLED=1.)
 	sibylBlocked, sibylPause, sibylRep, sibylErr := f.checkSibylTrust(ctx, c)
 	if sibylErr != nil {
 		// Memory is gone, so the trust ladder cannot run. This path FAILS
@@ -324,6 +329,7 @@ func (f *Firewall) Check(ctx context.Context, c Call) Result {
 		res.Message = "Vigil paused this call: " + res.Reason
 		return f.finish(ctx, span, sess, res)
 	}
+	// ===== DELETION TEST: MEMORY READ PATH — END =======================
 
 	// --- 2. Blast radius, unconditional for install/exec-shaped calls --------
 	if pkg := blastRadiusTarget(c); pkg != "" {
