@@ -1,0 +1,21 @@
+# VIGIL MEMORY — Sibyl memory service.
+#
+# sibyl-memory-client is pinned to the version this integration was built
+# and verified against by direct introspection (0.4.10). Later releases
+# exist (0.7.0 at time of writing); they are not assumed compatible,
+# because three method names in this SDK differ from the obvious guess
+# (set_entity/get_entity/archive_entity, not remember/recall/archive) and
+# that is exactly the kind of thing a minor bump moves.
+sibyl-memory-client==0.4.10
+
+# MCP sidecar: exposes the same local memory to MCP-speaking agents.
+# VIGIL already runs an MCP gateway, so this registers alongside it.
+sibyl-memory-mcp==0.1.14
+
+# CLI: `sibyl status`, inspection, and the manual recall a judge can run
+# against the same database the firewall uses.
+sibyl-memory-cli==0.3.23
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
