@@ -1,0 +1,12 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "outputDirectory": ".next",
+  "env": {
+    "VIGIL_BACKEND_URL": "https://vigil-hydra.onrender.com",
+    "NEXT_PUBLIC_VIGIL_BACKEND_URL": "https://vigil-hydra.onrender.com",
+    "NEXT_PUBLIC_VIGIL_WS_URL": "wss://vigil-hydra.onrender.com/api/v1/vigil/ws"
+  }
+}
+
