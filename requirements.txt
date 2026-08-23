@@ -1,0 +1,32 @@
+# VIGIL MEMORY — Python dependencies.
+#
+# The memory layer. Everything here is local-first: SQLite + FTS5, one file
+# on disk, no embeddings, no vector store, no API key, no network egress.
+# That is what lets it sit ahead of HydraDB and Featherless in the
+# enforcement order rather than behind them.
+#
+# sibyl-memory-client is pinned to the version this integration was built
+# and verified against by direct introspection. Three of its method names
+# differ from the obvious guess (set_entity/get_entity/archive_entity, not
+# remember/recall/archive), which is exactly the kind of thing a version
+# bump moves — so the pin is deliberate, not incidental.
+sibyl-memory-client==0.4.10
+
+# MCP sidecar. VIGIL already speaks MCP, so this exposes the same local
+# memory to any MCP-capable agent alongside the firewall's own gateway.
+# See .mcp.json.
+sibyl-memory-mcp==0.1.14
+
+# CLI: `sibyl status` and manual inspection of the same database the
+# firewall reads, which is how a judge verifies recall independently of
+# anything VIGIL prints about itself.
+sibyl-memory-cli==0.3.23
+
+# services/sibyl-memory HTTP wrapper.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+
+# Corpus tooling for the HydraDB tracks (scripts/ingest_*.py) uses only the
+# standard library — urllib, json, sqlite3 — and is deliberately kept
+# dependency-free so it runs anywhere Python does.

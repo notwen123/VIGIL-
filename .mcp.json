@@ -1,0 +1,22 @@
+{
+  "_comment": [
+    "MCP servers for VIGIL MEMORY.",
+    "",
+    "sibyl-memory runs as a sidecar next to VIGIL's own MCP gateway, pointed",
+    "at the SAME SQLite file the firewall reads. That shared path is the",
+    "point: an agent inspecting its own memory and the firewall enforcing on",
+    "that memory are looking at one database, not two copies that can drift.",
+    "",
+    "Set SIBYL_DB_PATH to match VIGIL's, or both default to",
+    "~/.sibyl-memory/memory.db and agree by accident rather than by design."
+  ],
+  "mcpServers": {
+    "sibyl-memory": {
+      "command": "python",
+      "args": ["-m", "sibyl_memory_mcp"],
+      "env": {
+        "SIBYL_DB_PATH": "${SIBYL_DB_PATH:-~/.sibyl-memory/memory.db}"
+      }
+    }
+  }
+}
