@@ -1,0 +1,107 @@
+# NOTE: this file predates the actual vigil-server binary and root
+# Dockerfile — it references image tags nothing here builds, a Redis
+# dependency the server does not use (session/policy/cost state is
+# in-process), and a REACT_APP_* var that only means something to
+# Create React App, not this Next.js frontend. Left as-is except for the
+# HydraDB env vars below, which were the actual ask; treat the rest as
+# scaffolding to replace with `docker build -f Dockerfile .`, not a
+# working deployment config yet.
+version: "3.8"
+
+services:
+  vigil-control-plane:
+    image: vigil/control-plane:v1.0.0
+    container_name: vigil-control-plane
+    restart: always
+    ports:
+      - "8080:8080" # REST API & WebSockets
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    environment:
+      - VIGIL_ENV=production
+      - VIGIL_REDIS_URL=redis://vigil-redis:6379
+      - VIGIL_LOG_LEVEL=info
+      # HydraDB graph layer — optional, same as VIGIL_FEATHERLESS_API_KEY.
+      # No separate sidecar/container: the client is pure Go (net/http
+      # against HydraDB's own managed API), not a process to run alongside
+      # this one. See pkg/query-service/vigil/hydra/hydra.go.
+      - VIGIL_HYDRADB_API_KEY=${VIGIL_HYDRADB_API_KEY:-}
+      - VIGIL_HYDRADB_DATABASE=${VIGIL_HYDRADB_DATABASE:-vigil-os}
+      - VIGIL_HYDRADB_BASE_URL=${VIGIL_HYDRADB_BASE_URL:-https://api.hydradb.com}
+      # Cross-session memory. Unlike HydraDB and Featherless this is NOT
+      # optional: the progressive-enforcement ladder is defined in terms of
+      # previous sessions, so without it every violation is a first
+      # violation forever. See the deletion test in README.md.
+      - VIGIL_SIBYL_URL=http://vigil-sibyl-memory:8787
+      # Base anchoring / x402 / ACP. All inert unless a signer is supplied;
+      # none of them fabricate a transaction when unset.
+      - VIGIL_BASE_RPC_URL=${VIGIL_BASE_RPC_URL:-}
+      - VIGIL_BASE_PRIVATE_KEY=${VIGIL_BASE_PRIVATE_KEY:-}
+      - VIGIL_BASE_CONTRACT=${VIGIL_BASE_CONTRACT:-}
+      - VIGIL_BASE_CHAIN_ID=${VIGIL_BASE_CHAIN_ID:-84532}
+      - VIGIL_X402_RECIPIENT=${VIGIL_X402_RECIPIENT:-}
+      - VIGIL_ACP_WALLET_ADDRESS=${VIGIL_ACP_WALLET_ADDRESS:-}
+    depends_on:
+      vigil-sibyl-memory:
+        condition: service_healthy
+      vigil-redis:
+        condition: service_started
+
+  # The memory layer. One SQLite file, no vectors, no embeddings, no API
+  # key, no network egress — which is exactly why it can sit ahead of
+  # HydraDB and Featherless in the enforcement order instead of behind them.
+  vigil-sibyl-memory:
+    build:
+      context: ./services/sibyl-memory
+    container_name: vigil-sibyl-memory
+    restart: always
+    ports:
+      - "8787:8787"
+    environment:
+      - SIBYL_DB_PATH=/data/memory.db
+      - SIBYL_HOST=0.0.0.0
+      - SIBYL_PORT=8787
+    volumes:
+      # A named volume, not a bind mount or an ephemeral layer. The whole
+      # product claim is that trust survives a restart; storing the database
+      # inside the container would make `docker compose down` reproduce
+      # exactly the amnesia this service exists to prevent.
+      - vigil_memory_data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8787/health', timeout=2).status==200 else 1)",
+        ]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  vigil-redis:
+    image: redis:7-alpine
+    container_name: vigil-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - vigil_redis_data:/data
+    command: redis-server --appendonly yes
+
+  vigil-frontend:
+    image: vigil/frontend:v1.0.0
+    container_name: vigil-frontend
+    restart: always
+    ports:
+      - "3301:3301"
+    environment:
+      - NODE_ENV=production
+      - REACT_APP_API_URL=http://vigil-control-plane:8080/api/v1
+
+volumes:
+  vigil_redis_data:
+  # The product. Everything else in this compose file can be rebuilt from
+  # source; this volume is the only thing that cannot.
+  vigil_memory_data:

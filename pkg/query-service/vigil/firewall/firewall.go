@@ -744,7 +744,19 @@ func (f *Firewall) finish(ctx context.Context, span telemetry.Span, sess *Sessio
 		}
 		// WARM: a refusal moves the agent down the trust ladder, and that
 		// new position is what the next process will read.
-		if res.Decision != Allow && res.Stage != StageSibyl {
+		//
+		// A memory-stage PAUSE counts. It means the agent retried a tool it
+		// had already been warned about, and ignoring a pause is itself
+		// evidence: a well-behaved agent backs off, so the one that does
+		// not is demonstrating precisely the behaviour worth banning. This
+		// is also what lets the ladder reach strike three at all — memory
+		// is consulted before the denylist, so after the first block the
+		// agent can never re-trip the original detector.
+		//
+		// A memory-stage BLOCK does not count. The agent is already at the
+		// floor; decaying it further on every retry would spend a write per
+		// call and teach nothing.
+		if res.Decision != Allow && !(res.Stage == StageSibyl && res.Decision == Block) {
 			f.recordSibylViolation(ctx, res)
 		}
 	}
