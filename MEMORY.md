@@ -14,35 +14,67 @@ takes about a millisecond and costs nothing.
 
 ## 1. Where memory is load-bearing — exact file:line
 
-A judge should not have to hunt. These six lines are the whole mechanism.
+Every line below was verified by `grep -rn "sibyl" pkg/ services/` and by
+checking that the cited line contains what this table claims (116 total
+matches; these are the load-bearing ones).
 
-### Read path — memory decides
+### Read path — memory decides the call
 
-| What | File | Line |
+| Step | File:line | What happens |
 |---|---|---|
-| Firewall consults memory **before** graph or model | [`firewall/firewall.go`](pkg/query-service/vigil/firewall/firewall.go#L277) | **277** |
-| The trust ladder itself (strike 1/2/3) | [`firewall/sibyl_trust.go`](pkg/query-service/vigil/firewall/sibyl_trust.go#L62) | **62** |
-| HTTP recall of an agent's trust record | [`sibyl/client.go`](pkg/query-service/vigil/sibyl/client.go#L197) | **197** |
-| Service endpoint backing it | [`services/sibyl-memory/app.py`](services/sibyl-memory/app.py#L170) | **170** |
+| 1 | [`firewall/firewall.go:282`](pkg/query-service/vigil/firewall/firewall.go#L282) | `checkSibylTrust()` — stage 1b, before graph or model |
+| 2 | [`firewall/sibyl_trust.go:62`](pkg/query-service/vigil/firewall/sibyl_trust.go#L62) | trust ladder: strike 1 PAUSE / 2 BLOCK+ban / 3 permanent |
+| 3 | [`firewall/sibyl_trust.go:71`](pkg/query-service/vigil/firewall/sibyl_trust.go#L71) | `Sibyl.TrustScore(ctx, agentID)` |
+| 4 | [`sibyl/client.go:197`](pkg/query-service/vigil/sibyl/client.go#L197) | HTTP `POST /recall` |
+| 5 | [`services/sibyl-memory/app.py:170`](services/sibyl-memory/app.py#L170) | `get_entity()` → SQLite point lookup |
 
 ### Write path — memory learns
 
-| What | File | Line |
+| Step | File:line | What happens |
 |---|---|---|
-| COLD journal: every ALLOW/BLOCK/PAUSE | [`firewall/firewall.go`](pkg/query-service/vigil/firewall/firewall.go#L745) | **745** |
-| WARM trust: violation walks the ladder down | [`firewall/firewall.go`](pkg/query-service/vigil/firewall/firewall.go#L766) | **766** |
-| Trust arithmetic and 24h tool ban | [`firewall/sibyl_trust.go`](pkg/query-service/vigil/firewall/sibyl_trust.go#L122) | **122** |
-| Persisting the record | [`sibyl/client.go`](pkg/query-service/vigil/sibyl/client.go#L220) | **220** |
+| 1 | [`firewall/firewall.go:745`](pkg/query-service/vigil/firewall/firewall.go#L745) | COLD journal: every ALLOW/BLOCK/PAUSE |
+| 2 | [`firewall/firewall.go:766`](pkg/query-service/vigil/firewall/firewall.go#L766) | `recordSibylViolation()` on any refusal |
+| 3 | [`firewall/sibyl_trust.go:122`](pkg/query-service/vigil/firewall/sibyl_trust.go#L122) | trust −20, 24h tool ban at strike 2 |
+| 4 | [`firewall/sibyl_trust.go:159`](pkg/query-service/vigil/firewall/sibyl_trust.go#L159) | `Sibyl.RememberAgent()` — WARM upsert |
+| 5 | [`firewall/sibyl_trust.go:178`](pkg/query-service/vigil/firewall/sibyl_trust.go#L178) | `Sibyl.Archive()` below the trust floor |
+| 6 | [`sibyl/client.go:220`](pkg/query-service/vigil/sibyl/client.go#L220) → [`app.py:157`](services/sibyl-memory/app.py#L157) | `POST /remember` → `set_entity()` |
+
+### Supporting API
+
+| Tier | Read | Write |
+|---|---|---|
+| HOT `state/` | [`client.go:256`](pkg/query-service/vigil/sibyl/client.go#L256) | [`client.go:248`](pkg/query-service/vigil/sibyl/client.go#L248) |
+| WARM `entities/` | [`client.go:197`](pkg/query-service/vigil/sibyl/client.go#L197) | [`client.go:213`](pkg/query-service/vigil/sibyl/client.go#L213) |
+| COLD `journal/` | [`client.go:300`](pkg/query-service/vigil/sibyl/client.go#L300) | [`client.go:282`](pkg/query-service/vigil/sibyl/client.go#L282) |
+| REFERENCE | [`client.go:318`](pkg/query-service/vigil/sibyl/client.go#L318) | [`client.go:311`](pkg/query-service/vigil/sibyl/client.go#L311) |
+| ARCHIVE | — | [`client.go:328`](pkg/query-service/vigil/sibyl/client.go#L328) |
 
 **To delete the memory layer:** comment out `firewall.go` lines **277–332**
 (marked `DELETION TEST: MEMORY READ PATH — BEGIN/END`) and line **766**.
 
-The read path is a marked block rather than a single line, because line 277
+The read path is a marked block rather than a single line, because line 282
 declares variables the following stage consumes — commenting that one line
-alone breaks the build instead of demonstrating anything. The markers exist
-so the boundary is unambiguous. Verified: with the block commented out the
-build is green, the memory service is still running and still holding
-`trust=10` for the agent, and the call is **ALLOWED** anyway.
+alone breaks the build instead of demonstrating anything.
+
+**Verified by performing it.** With the block commented out the build is
+green, the memory service is *still running and still holding
+`trust_score: 10, banned: ['run_command']`*, and the identical call is
+**ALLOWED**. A running-but-ignored memory service is stronger evidence than
+a stopped one, which could be mistaken for a connectivity failure.
+
+One asymmetry worth knowing: **code deletion is silent, runtime failure is
+loud.** Commenting the block out produces `ALLOW` with no error, because the
+logging code is what you deleted. A runtime outage (`VIGIL_SIBYL_DISABLED=1`,
+or the service down) emits:
+
+```
+level=ERROR msg="vigil: trust_score unavailable — cross-session enforcement
+is DISABLED, repeat offenders will not be blocked" session=s4
+tool=run_command agent=gate-agent error="trust_score unavailable: sibyl
+memory layer is required for progressive enforcement: ... connection refused"
+    ✔ attempt 1/1  ALLOW  stage=default  trust=n/a
+      ^ trust_unavailable: this verdict is UNENFORCED, not clean
+```
 
 ---
 
@@ -134,6 +166,25 @@ offender walk is the only outcome that makes the loss unmistakable. Affected
 decisions are flagged `trust_unavailable` so the dashboard shows them as
 **unenforced, not clean**.
 
+
+### Memory actually grows across sessions
+
+Measured on a clean database, `gate-agent` running the same blocked command:
+
+| | WARM entities | COLD journal | on-disk |
+|---|---|---|---|
+| after session 1 | 2 | 3 | 762,016 B |
+| after session 2 | 2 | **5** | **819,696 B** |
+
+COLD grows with every decision. WARM stays flat because agent trust is an
+upsert on `UNIQUE(tenant_id, category, name)` — one row per agent, rewritten
+as the score moves, so recall is a point lookup with no history to reduce
+over.
+
+Note the main `.db` file reads 4,096 bytes at both checkpoints: SQLite runs
+in WAL mode, so writes live in `memory.db-wal` until checkpoint. Measuring
+the main file alone would understate the data by two orders of magnitude.
+
 ---
 
 ## 4. The five tiers, and what VIGIL puts in each
@@ -183,6 +234,43 @@ Three SDK method names differ from the obvious guess, found by introspection:
 | `archive()` | `archive_entity()` |
 
 `MemoryClient.local()` does exist as documented.
+
+
+### Base anchoring, proven against a real chain
+
+```bash
+./demo/anchor_proof.sh     # requires foundry; no funds, no mainnet
+```
+
+Runs a local EVM node on Base Sepolia's chain id (84532), deploys the real
+`VigilAnchor.sol`, and drives it through VIGIL's own Go anchoring code:
+
+```
+[3] anchoring two ledger links through VIGIL's own Go code
+    tx1 0xe15fbdd72145c17f84abc4551c380540998ea01222c1b1154954619a394b9c82
+    tx2 0xea4cec2cb503c88793eb18c235aa2493115ef260c4321e34a39bbdd429d754c4
+[4] verifying on chain
+    receipt status  : 1   gas 69848
+    anchorCount     : 2
+    latestHash      : 0x2222…2222
+    verifyHead real : true
+    verifyHead fake : false
+[5] tamper guard — anchoring a link that skips a decision
+    reverted as expected (prevHash does not continue this chain)
+    head unchanged after the rejected attempt
+ANCHOR PROOF PASSED
+```
+
+This proves the calldata encoding, EIP-1559 signing, chain-id guard, gas
+estimation and contract logic are correct — a real node accepted the
+transactions and the contract's state changed accordingly. The tamper guard
+is the security property: an operator who deletes a decision cannot anchor
+the next one without breaking continuity on a ledger they do not control.
+
+**It proves nothing about public Base.** Those hashes exist only on the local
+chain the script starts, and the explorer URLs VIGIL derives from the chain
+id will not resolve. Public anchoring still needs a funded signer, and
+`/vigil/base/status` reports `anchoring_enabled: false` until it has one.
 
 ---
 
