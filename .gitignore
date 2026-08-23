@@ -1,0 +1,36 @@
+# Build output
+/main
+*.o
+*.exe
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Deps
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Browser-automation artifacts from local verification runs
+/.playwright-mcp/
+/hero*.png
+
+# Release tooling deps (root)
+/node_modules/
+
+# Reference site the landing page was ported from — local only
+/refrance/
+
+# Local runtime artifacts: the audit ledger is written by every demo run.
+vigil-audit.jsonl
+*-audit.jsonl
+
+# scripts/ingest_memory.py auto-downloads the 15MB LongMemEval oracle
+# dataset here on first run, and regenerates the sampling manifest every
+# run — neither belongs in git.
+scripts/data/
