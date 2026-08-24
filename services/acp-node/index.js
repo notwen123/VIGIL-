@@ -94,11 +94,14 @@ async function main() {
   // Imported lazily so forward-only mode works without the dependency
   // installed, and so a missing SDK is reported plainly rather than as an
   // unrelated startup crash.
-  let AcpClient, AcpContractClient;
+  let AcpClient, AcpContractClient, baseAcpConfig, baseSepoliaAcpConfig;
   try {
-    ({ default: AcpClient, AcpContractClient } = await import(
-      "@virtuals-protocol/acp-node"
-    ));
+    ({
+      default: AcpClient,
+      AcpContractClient,
+      baseAcpConfig,
+      baseSepoliaAcpConfig,
+    } = await import("@virtuals-protocol/acp-node"));
   } catch (err) {
     console.error(
       "[vigil-acp] @virtuals-protocol/acp-node is not installed. " +
@@ -107,9 +110,47 @@ async function main() {
     process.exit(1);
   }
 
-  const contract = await AcpContractClient.build(PRIVATE_KEY, ENTITY_ID, WALLET, {
-    chainId: CHAIN_ID,
-  });
+  // build()'s fourth argument is a whole AcpContractConfig — chain, RPC
+  // endpoint, ACP contract address, fare token and ABI — not an options bag.
+  // Passing `{ chainId }` replaced all of it, so the SDK came up with no RPC
+  // URL and failed inside viem with "No URL was provided to the Transport",
+  // an error that names nothing about configuration. Hand it the config the
+  // SDK ships for the chain we want.
+  const config = CHAIN_ID === 84532 ? baseSepoliaAcpConfig : baseAcpConfig;
+  if (!config) {
+    console.error(
+      `[vigil-acp] no ACP config for chain ${CHAIN_ID}; supported: 8453, 84532.`,
+    );
+    process.exit(1);
+  }
+
+  // Registration is Virtuals' own onboarding, not something a key alone
+  // satisfies: the SDK builds a modular smart account, so it needs the
+  // agent wallet address and session entity id issued when the agent is
+  // created on the Virtuals platform. Say which one is missing rather than
+  // letting it fail somewhere inside the SDK.
+  const missing = [
+    !WALLET && "VIGIL_ACP_WALLET_ADDRESS",
+    !ENTITY_ID && "VIGIL_ACP_ENTITY_ID",
+  ].filter(Boolean);
+  if (missing.length) {
+    console.error(
+      `[vigil-acp] ${missing.join(" and ")} not set — these are issued when ` +
+        "the agent is registered at https://app.virtuals.io, and a private key " +
+        "alone cannot substitute for them. Running in forward-only mode: jobs " +
+        "POSTed here are still decided by the Go engine, but VIGIL is NOT a " +
+        "registered ACP provider and this bridge will not claim otherwise.",
+    );
+    if (REGISTER_ONLY) process.exit(1);
+    return serveForwardOnly();
+  }
+
+  const contract = await AcpContractClient.build(
+    PRIVATE_KEY,
+    ENTITY_ID,
+    WALLET,
+    config,
+  );
 
   const client = new AcpClient({
     acpContractClient: contract,

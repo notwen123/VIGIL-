@@ -12,7 +12,7 @@ Commit under audit: `4ec7167`. Tree clean.
 | 2 | Env + key safety | **DONE** |
 | 3 | Base Sepolia public tx → CHECK 6 | **DONE** (Sepolia, not mainnet) |
 | 4 | Critical path / cross-session / deletion | **DONE** — CHECKs 1,2,4,5,7 DEEP |
-| 5 | Nine benefits | **6 DONE, 3 PARTIAL** |
+| 5 | Nine benefits | **7 DONE, 2 PARTIAL** (bridge now runs — addendum) |
 | 6 | Submission readiness | **PARTIAL** — video + waitlist missing |
 
 ---
@@ -427,3 +427,108 @@ Nothing on that list is a code defect. The three defects found during this
 work — the unreachable ARCHIVE branch, the archive-un-bans-the-agent
 regression it exposed, and the three anchoring bugs that made every anchor
 after the first revert — are fixed, tested, and committed.
+
+---
+
+## ADDENDUM — ACP BRIDGE NOW RUNS END TO END
+
+Both reported errors were real. Neither needed mainnet funding, and one was a
+code bug.
+
+**Error 2 (EADDRINUSE :8899) — already gone.** `ss -ltn | grep 8899` showed
+nothing: the crashed process died with the exception in the traceback. No kill
+was needed.
+
+**Error 1 (key not set) — real, and it hid a second bug.** Loading
+`.env.local` into the shell got past the "not set" branch, and the SDK then
+failed with:
+
+```
+[vigil-acp] fatal: UrlRequiredError: No URL was provided to the Transport.
+    at _AcpContractClient.build (…/@virtuals-protocol/acp-node/dist/index.js:6040:31)
+    at main (…/services/acp-node/index.js:110:44)
+```
+
+The cause is in our code, not the environment. From the SDK:
+
+```js
+// node_modules/@virtuals-protocol/acp-node/dist/index.js:6038
+static async build(walletPrivateKey, sessionEntityKeyId, agentWalletAddress, config = baseAcpConfig)
+```
+
+The fourth argument is a **whole `AcpContractConfig`** — chain, RPC endpoint,
+ACP contract address, fare token, ABI, retry policy — not an options bag.
+`index.js:110` passed `{ chainId: CHAIN_ID }`, which replaced all of it, so the
+client came up with `alchemyRpcUrl === undefined` and died inside viem with an
+error naming nothing about configuration. Fixed by handing it the config the
+SDK ships (`baseAcpConfig` / `baseSepoliaAcpConfig`, selected by chain id).
+
+### The bridge runs and forwards
+
+```
+[vigil-acp] forward-only bridge on :8899 -> http://127.0.0.1:8080
+LISTEN 0  511  *:8899  *:*
+```
+
+A real ACP job, POSTed to the bridge, decided by the Go engine from memory:
+
+```json
+{
+    "job_id": "final-audit-2",
+    "buyer_agent_id": "trading-agent-alpha",
+    "verdict": "BLOCK",
+    "reason": "refused from VIGIL memory: trading-agent-alpha has trust 10 after
+               2 recorded violation(s), most recently sibyl_memory — recalled in
+               2.29ms without an LLM call",
+    "trust_score": 10, "recalled": true, "prior_blocks": 2, "recall_ms": 2.292,
+    "source": "sibyl_memory(local sqlite, no llm)"
+}
+```
+
+```
+[vigil-acp] job=final-audit-2 buyer=trading-agent-alpha verdict=BLOCK trust=10
+            recall=2.292ms source=sibyl_memory(local sqlite, no llm)
+```
+
+and the Go engine counted them: `"jobs_handled": 2`.
+
+**That agent was ARCHIVED**, not merely low-trust — `archived_entities: 1` in
+the same database. The job was refused because `/recall` falls back to the
+ARCHIVE tier. Without the fallback added earlier this session, recall would
+have returned `found=false` and the archived offender would have been sent to
+REVIEW instead of BLOCK. The archive fix and the marketplace path are the same
+mechanism, now demonstrated together.
+
+`curl :8899/status` returns **405**: the bridge is POST-only by design. ACP
+status lives on the Go engine at `/api/v1/vigil/acp/status`, because a status
+endpoint on the bridge would be a second source of truth about who is banned.
+
+### x1.25 is not one line away, and mainnet funding is not the blocker
+
+Two corrections to the premise, both from the SDK source:
+
+1. **ACP supports Base Sepolia.** `baseSepoliaAcpConfig` is exported at
+   `dist/index.js:2378`, chain 84532, USDC `0x036CbD53…F7e`. Sending 0.002 ETH
+   to Base mainnet would not have been necessary; the wallet already holds
+   0.0399 ETH on Sepolia.
+2. **Registration needs identity, not funds.** `build()` requires
+   `agentWalletAddress` and `sessionEntityKeyId`, and `init()` uses them to
+   construct a modular smart account
+   (`createModularAccountV2Client`, `dist/index.js:6045`). Those are issued
+   when an agent is registered at `app.virtuals.io`. A private key cannot
+   substitute for them, and neither can any amount of ETH.
+
+`VIGIL_ACP_WALLET_ADDRESS` and `VIGIL_ACP_ENTITY_ID` are both empty, so the
+bridge reports exactly that and stays forward-only. `Registered()`
+(`pkg/acp/service.go:115`) returns **false**, and I have not set the wallet
+variable to flip it — that would claim a registration that does not exist.
+
+**Verdict: Virtuals stays PARTIAL. Multiplier stays x1.15.** The blocker is a
+Virtuals platform signup you have to do, taking about the same few minutes as
+the funding step would have — it is just a different few minutes than the ones
+budgeted.
+
+Benefit 4 moves from PARTIAL toward DONE on everything except registration:
+the SDK is installed (242 packages), the bridge starts, listens, forwards, and
+returns memory-backed verdicts, and the decision logic stays in Go with one
+source of truth.
