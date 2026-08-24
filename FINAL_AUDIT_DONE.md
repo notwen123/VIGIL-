@@ -312,7 +312,7 @@ blocked/pause, consumed at `firewall.go:334/342` as `Block, StageSibyl` /
 | 3 | Five tiers live | **DONE** | 5/5 above: 1 / 2 / 35 / 3 / 3 |
 | 4 | Win every track | **PARTIAL** | Base **done** (public tx). Virtuals **not registered** — see below |
 | 5 | Cost saved | **DONE** | Every BLOCK above is `model=none` at 1–2.6 ms, before graph and model; guarded by the deletion-gate ordering test |
-| 6 | PMF / funding | **FAIL** | `MEMORY.md:388-393` still four `TODO` lines |
+| 6 | PMF / funding | **PARTIAL** | Waitlist live: https://tally.so/r/XxPJAe (HTTP 200), linked from `README.md` and `MEMORY.md`. Design-partner slots still blank, deliberately |
 | 7 | Privacy | **DONE** | `/health` → `"backend":"sqlite+fts5","vectors":false`; two-process test reports `network calls: 0` |
 | 8 | Runs offline | **DONE** | `env -i` (no API keys, no env at all) → **12 packages ok**, zero failures |
 | 9 | Production history | **DONE** | 45 commits; `go build ./...` green |
@@ -416,7 +416,7 @@ honestly, and neither is faked.
 
 | Fix | Where | Effort | Blocker |
 |---|---|---|---|
-| Waitlist URL | `MEMORY.md:393` | 10 min | Needs a real form you own |
+
 | Design partner (≥1 real) | `MEMORY.md:390-392` | varies | One real link beats three fabricated |
 | Demo video | `demo/demo.mp4` | 15 min | Needs a screen recorder; `memory_demo.sh` runs clean in one take |
 | Virtuals registration | `services/acp-node/` | — | Mainnet funds + entity id |

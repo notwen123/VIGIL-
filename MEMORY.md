@@ -387,13 +387,16 @@ mistake it was already corrected for.
 
 **Design partners — TODO, do not fill with fabricated names.**
 
+- [x] **Waitlist: https://tally.so/r/XxPJAe**
+      VIGIL MEMORY — 5-tier SQLite firewall that checks if an agent is banned
+      across restarts and blocks in 1ms. Base-anchored on Sepolia, no LLM.
 - [ ] Partner 1 — `TODO: real GitHub org / contact`
 - [ ] Partner 2 — `TODO: real GitHub org / contact`
 - [ ] Partner 3 — `TODO: real GitHub org / contact`
-- [ ] Waitlist form — `TODO: real form URL`
 
-These are intentionally blank. Naming design partners we do not have would
-be the one claim in this repository that could not be verified by running
+The waitlist is a real form. The partner slots stay blank: naming design
+partners we do not have would be the one claim in this repository that could
+not be verified by running
 something.
 
 ---

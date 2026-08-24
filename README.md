@@ -4,6 +4,24 @@ VIGIL now remembers agents across sessions, devices and restarts. The deletion
 test, the five-tier map, and every `file:line` a judge needs are in
 **[MEMORY.md](./MEMORY.md)** — start there.
 
+## Join Waitlist
+
+VIGIL MEMORY blocks banned agents in <2ms across restarts.
+
+- **Waitlist:** https://tally.so/r/XxPJAe
+- **ACP service:** `vigil_memory_block_banned_agents_in_1ms`
+- **Entity:** `01a0350e-07ea-7f36-ad55-89a7c8d97bef`
+- **Wallet:** `0x07066313090a8a45edd830f431fa500eb2f2cb45`
+
+Job evaluation is live and memory-backed — POST an ACP job and it is decided
+from cross-session trust in about a millisecond, no LLM. On-chain provider
+registration is **not** complete: the agent's ERC-4337 smart account has no
+code deployed on Base mainnet or Sepolia yet, so `/api/v1/vigil/acp/status`
+reports `identity_configured: true, registered: false`. It flips on its own
+once that account is deployed.
+
+---
+
 **Licensing:** original VIGIL MEMORY code (`pkg/query-service/vigil/`,
 `pkg/acp/`, `services/`) is MIT — see [LICENSE.MIT](./LICENSE.MIT). The
 inherited SigNoz fork remains Apache-2.0 — see [LICENSE](./LICENSE). The root
