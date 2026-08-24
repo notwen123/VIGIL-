@@ -28,6 +28,7 @@
 package acp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -85,6 +86,10 @@ type Service struct {
 
 	mu      sync.Mutex
 	history []Decision
+	// deployed caches whether the agent's smart account has code on chain.
+	// deployedKnown is set only once a positive answer is seen.
+	deployed      bool
+	deployedKnown bool
 }
 
 // New builds the ACP service.
@@ -106,14 +111,97 @@ func New(c *sibyl.Client, logger *slog.Logger) *Service {
 	}
 }
 
-// Registered reports whether VIGIL has an on-chain provider identity.
-//
-// False means job evaluation still works locally but nothing has been
-// registered on Base. Reporting this honestly matters: a provider that
-// claims registration it does not have would have counterparties expecting
-// on-chain settlement that cannot happen.
-func (s *Service) Registered() bool {
+// Configured reports that an ACP identity has been supplied. It says nothing
+// about whether registration succeeded.
+func (s *Service) Configured() bool {
 	return s != nil && s.wallet != "" && os.Getenv("VIGIL_ACP_PRIVATE_KEY") != ""
+}
+
+// Registered reports on-chain registration, and requires evidence.
+//
+// Having the environment variables set is not that evidence. An ACP agent
+// wallet is an ERC-4337 smart account, and Virtuals issues its address
+// *counterfactually* — the address exists and is derivable long before any
+// contract is deployed to it. So a wallet address in the environment is a
+// prediction, not a registration, and the earlier version of this function
+// reported `registered: true` for an account with zero bytes of code on
+// every chain. That is precisely the claim the doc comment above warns
+// against: counterparties would expect on-chain settlement that cannot
+// happen.
+//
+// The check is the same one the Virtuals SDK performs before it will build a
+// client ("agent account %s is not deployed on-chain"): ask the chain
+// whether anything is deployed at that address. Verified, not declared.
+func (s *Service) Registered() bool {
+	if !s.Configured() {
+		return false
+	}
+	deployed, err := s.accountDeployed()
+	if err != nil {
+		// Unreachable RPC means unproven, and unproven is not registered.
+		return false
+	}
+	return deployed
+}
+
+// accountDeployed reports whether the agent wallet has contract code, cached
+// because it can only transition once (undeployed -> deployed) and a
+// dashboard poll must not become an RPC call per refresh.
+func (s *Service) accountDeployed() (bool, error) {
+	s.mu.Lock()
+	if s.deployedKnown {
+		v := s.deployed
+		s.mu.Unlock()
+		return v, nil
+	}
+	s.mu.Unlock()
+
+	rpc := os.Getenv("VIGIL_ACP_RPC_URL")
+	if rpc == "" {
+		switch s.chainID {
+		case 8453:
+			rpc = "https://mainnet.base.org"
+		case 84532:
+			rpc = "https://sepolia.base.org"
+		default:
+			return false, fmt.Errorf("no RPC for chain %d; set VIGIL_ACP_RPC_URL", s.chainID)
+		}
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "eth_getCode",
+		"params": []any{s.wallet, "latest"},
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rpc, bytes.NewReader(body))
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	var out struct {
+		Result string `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return false, err
+	}
+	deployed := out.Result != "" && out.Result != "0x"
+
+	s.mu.Lock()
+	// Only a positive result is worth caching. Caching "not deployed" would
+	// pin the answer for the lifetime of the process, so an agent that
+	// registers while VIGIL is running would keep reporting false.
+	if deployed {
+		s.deployed, s.deployedKnown = true, true
+	}
+	s.mu.Unlock()
+	return deployed, nil
 }
 
 // Status describes the provider for the dashboard and /vigil/acp/status.
@@ -122,15 +210,18 @@ func (s *Service) Status() map[string]any {
 		return map[string]any{"enabled": false}
 	}
 	return map[string]any{
-		"enabled":         true,
-		"registered":      s.Registered(),
-		"chain_id":        s.chainID,
-		"wallet":          s.wallet,
-		"memory_backed":   s.sibyl.Configured(),
-		"allow_threshold": sibyl.TrustACPAllow,
-		"block_threshold": sibyl.TrustACPBlock,
-		"note": "Job evaluation is local and memory-backed. " +
-			"On-chain registration requires VIGIL_ACP_PRIVATE_KEY and a funded wallet.",
+		"enabled":             true,
+		"registered":          s.Registered(),
+		"identity_configured": s.Configured(),
+		"chain_id":            s.chainID,
+		"wallet":              s.wallet,
+		"memory_backed":       s.sibyl.Configured(),
+		"allow_threshold":     sibyl.TrustACPAllow,
+		"block_threshold":     sibyl.TrustACPBlock,
+		"note": "Job evaluation is local and memory-backed. `registered` is " +
+			"verified by asking the chain whether the agent's smart account has " +
+			"code — a configured wallet address is a counterfactual prediction, " +
+			"not a registration.",
 		"jobs_handled": len(s.History()),
 	}
 }

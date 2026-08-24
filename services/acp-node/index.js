@@ -38,7 +38,12 @@ import http from "node:http";
 
 const API = process.env.VIGIL_API_URL || "http://127.0.0.1:8080";
 const CHAIN_ID = Number(process.env.VIGIL_ACP_CHAIN_ID || 8453);
-const PRIVATE_KEY = process.env.VIGIL_ACP_PRIVATE_KEY || "";
+// viem requires a 0x-prefixed hex key and rejects a bare one with "invalid
+// private key, expected hex or 32 bytes, got string". The Go side strips the
+// prefix (audit/base_anchor.go), so the same .env.local value is valid there
+// and invalid here. Normalise rather than requiring one spelling in the file.
+const RAW_KEY = (process.env.VIGIL_ACP_PRIVATE_KEY || "").trim();
+const PRIVATE_KEY = RAW_KEY && !RAW_KEY.startsWith("0x") ? `0x${RAW_KEY}` : RAW_KEY;
 const ENTITY_ID = process.env.VIGIL_ACP_ENTITY_ID || "";
 const WALLET = process.env.VIGIL_ACP_WALLET_ADDRESS || "";
 const REGISTER_ONLY = process.argv.includes("--register-only");
@@ -145,12 +150,28 @@ async function main() {
     return serveForwardOnly();
   }
 
-  const contract = await AcpContractClient.build(
-    PRIVATE_KEY,
-    ENTITY_ID,
-    WALLET,
-    config,
-  );
+  // Registration can fail for reasons that are not our bug and not fatal to
+  // the useful half of this process — most commonly the agent's smart
+  // account existing only counterfactually, i.e. issued by Virtuals but
+  // never deployed on chain. Degrade to forward-only rather than exiting:
+  // job evaluation is what VIGIL actually contributes, and it does not need
+  // an on-chain identity. Dying here would take the working path down with
+  // the unavailable one.
+  let contract;
+  try {
+    contract = await AcpContractClient.build(PRIVATE_KEY, ENTITY_ID, WALLET, config);
+  } catch (err) {
+    console.error(
+      `[vigil-acp] registration on chain ${CHAIN_ID} failed: ${err.message}`,
+    );
+    console.error(
+      "[vigil-acp] continuing in forward-only mode. Jobs POSTed here are still " +
+        "decided by the Go engine from cross-session memory, but VIGIL is NOT a " +
+        "registered ACP provider and this bridge will not claim otherwise.",
+    );
+    if (REGISTER_ONLY) process.exit(1);
+    return serveForwardOnly();
+  }
 
   const client = new AcpClient({
     acpContractClient: contract,
