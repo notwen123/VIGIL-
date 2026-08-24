@@ -18,11 +18,11 @@ contradicted an expectation, the contradiction is reported, not smoothed.
 | 3 | All five tiers carry live data | **DEEP** — 5/5 (ARCHIVE fixed, see addendum) |
 | 4 | Cross-session persistence is real | **DEEP** |
 | 5 | Deletion breaks the product | **DEEP** |
-| 6 | Base + Virtuals do real work | **PARTIAL** — code real, mainnet unproven |
+| 6 | Base + Virtuals do real work | **DEEP** for Base (Sepolia, public tx) / **PARTIAL** for Virtuals |
 | 7 | Memory replaces the context window | **DEEP** |
-| 8 | The claimed benefits are backed | **PARTIAL** — 3/3 claimed, benefit 3 unexercised |
+| 8 | The claimed benefits are backed | **DEEP** — 3/3, ACP now tested |
 
-**FINAL: DEEP, with three scoped PARTIALs.** The core claim — that removing
+**FINAL: DEEP, with one scoped PARTIAL** (Virtuals ACP registration). The core claim — that removing
 the memory layer changes VIGIL's verdicts — is proven by execution, not
 argument. The PARTIALs are gaps of coverage and deployment, not of
 architecture.
@@ -490,3 +490,132 @@ a fourth strike. It is reached on the **second recorded** strike. Strike 1
 (50→30) and strike 2 (30→10) are recorded; from then on every call
 short-circuits at the memory stage, which `firewall.go:829` deliberately
 excludes from recording, so there is no third or fourth strike to wait for.
+
+---
+
+## ADDENDUM 2 — CHECK 6 and CHECK 8 closed
+
+### CHECK 6 — Base is now **DEEP**. Virtuals stays **PARTIAL**.
+
+`VigilAnchor.sol` is deployed to public Base Sepolia and VIGIL has anchored
+real decisions to it from the running server.
+
+| | |
+|---|---|
+| Contract | `0x03164E72ffEd3293350A9b66e40aF00E59645020` |
+| Deploy tx | `0x659793a76cc1a0d4076a6f236b61df72c1be39d81fa0246f8479ed7cfdc068c0` |
+| First anchor | `0x8fb2c862953d342ede8b2ab42e2701ff73e435859993769d480d160c8ee7d3a1` |
+| Signer | `0x5aB3036C7d0bA7043E0BB531374dC6c732eC4954` |
+| Chain | Base **Sepolia**, id 84532 |
+
+Basescan: `https://sepolia.basescan.org/tx/<hash>` for each of the above.
+
+The first anchor is the real head of this repo's live audit ledger, 355
+events at the time — not a synthetic value:
+
+```
+LEDGER_EVENTS=355
+HEAD=778c4282f2f3698dfe8a6ad58053ce0ae51eb5b666b59e0bdc2693939edf4b69
+TX=0x8fb2c862953d342ede8b2ab42e2701ff73e435859993769d480d160c8ee7d3a1
+```
+
+`cast receipt` against the public RPC:
+
+```
+status               1 (success)
+blockNumber          45910360
+gasUsed              70228
+to                   0x03164E72ffEd3293350A9b66e40aF00E59645020
+```
+
+On-chain state, queried with `cast call`:
+
+```
+anchorCount          6
+latestHash           0x778c4282f2f3698dfe8a6ad58053ce0ae51eb5b666b59e0bdc2693939edf4b69
+verifyHead(real)     true
+verifyHead(tampered) false
+```
+
+The on-chain head equals the local ledger head byte for byte, and a tampered
+claim is rejected. That is the property the mechanism exists for, now
+demonstrated on a chain the operator does not control.
+
+Live endpoint, from the running server:
+
+```
+anchoring_enabled: True | chain_id: 84532 | anchors_sent: 2
+wallet: 0x5aB3036C7d0bA7043E0BB531374dC6c732eC4954
+  tx 0xecea9fc299562c17905d563ac54680b10be8e9df5be0bde61eca4c7b78aba62a
+  tx 0x8751c371d82d70ebea050b1d2ba719ff8cc70e0bbda94b0d767690bcecb18d2f
+```
+
+**Deploying for real found three bugs the anvil proof structurally could
+not.** This is the most important finding in this addendum, because the
+earlier report cited that anvil run as evidence the on-chain path worked. It
+worked on anvil and would have failed in production:
+
+1. **Nonce race.** Anchors fire from a goroutine per blocked decision. A
+   burst read the same `PendingNonceAt` and signed different payloads
+   against one nonce, so at most one could land. The concurrent dial storm
+   was also throttled by the public RPC, surfacing as
+   `chain id: context deadline exceeded` — an error naming nothing about
+   nonces.
+2. **`prevHash` meant two different things.** `VigilAnchor.anchor()`
+   requires `prevHash == latestHash[msg.sender]` — the previously *anchored*
+   hash — while the firewall passed the decision's predecessor in the local
+   ledger, and anchors only BLOCKs. Consecutive blocks are almost never
+   adjacent in the ledger, so **every anchor after the first reverted** on
+   the continuity guard. The anvil proof missed it by anchoring two
+   deliberately adjacent hashes.
+3. **Time-of-check race on the head.** Reading the confirmed `latestHash`
+   while a prior anchor was still pending gave two sends the same prevHash.
+
+All three are fixed in `audit/base_anchor.go` and `base_anchor_tx.go`.
+
+**Sepolia, not mainnet.** Testnet transactions carry no economic weight. The
+signing, encoding and contract logic are identical on mainnet; the funding is
+not. Recorded as Sepolia everywhere rather than as "on Base".
+
+**Virtuals ACP remains PARTIAL.** Job evaluation is live, memory-backed and
+now tested (below), but on-chain registration needs a mainnet signer and a
+Virtuals entity id, neither of which exists. `services/acp-node/index.js`
+refuses to claim registration it does not have and stays in forward-only
+mode. `Registered()` returns false, honestly.
+
+### CHECK 8 — now **DEEP**
+
+`pkg/acp` had no test files, which is why the marketplace-reputation claim
+was the one benefit backed only by reading code. `pkg/acp/service_test.go`
+now drives the real `Service` against a real memory service:
+
+```
+low_trust_is_refused
+  acp-banned-… -> BLOCK (trust 12, 3 prior blocks, 1.02ms,
+                  source sibyl_memory(local sqlite, no llm))
+high_trust_is_accepted
+  acp-trusted-… -> ALLOW (trust 85, 0 prior blocks, 0.55ms)
+unknown_counterparty_is_not_auto-allowed
+  unknown -> REVIEW — no prior record; unknown counterparties are not auto-approved
+--- PASS: TestLiveACPTrustGating
+```
+
+The third case matters most: an unseen counterparty is *unproven*, not
+trusted. Getting it backwards would let an attacker bypass the entire layer
+by presenting a fresh agent id.
+
+### Still open — stated, not closed
+
+- **Virtuals ACP on-chain registration** — needs a mainnet signer and entity
+  id. Code is complete and logic-free by design.
+- **x402** — code-complete, `enabled: false`, needs `VIGIL_X402_RECIPIENT`.
+- **Base mainnet** — signer holds 0 ETH on mainnet.
+- **Design partners and waitlist URL** (`MEMORY.md:328`) — still TODO. These
+  cannot be produced by writing code, and fabricating them would be worse
+  than leaving them blank.
+- **Demo video** — not recorded. No screen-capture tooling on this machine.
+
+### Score
+
+Not estimated here. A predicted score is not a measurement, and this report
+only carries things that were run.

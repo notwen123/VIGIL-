@@ -284,8 +284,58 @@ the next one without breaking continuity on a ledger they do not control.
 
 **It proves nothing about public Base.** Those hashes exist only on the local
 chain the script starts, and the explorer URLs VIGIL derives from the chain
-id will not resolve. Public anchoring still needs a funded signer, and
-`/vigil/base/status` reports `anchoring_enabled: false` until it has one.
+id will not resolve.
+
+### Now anchored on public Base Sepolia
+
+`VigilAnchor.sol` is deployed and VIGIL has anchored real decisions to it
+from the live server.
+
+| | |
+|---|---|
+| Contract | [`0x03164E72ffEd3293350A9b66e40aF00E59645020`](https://sepolia.basescan.org/address/0x03164E72ffEd3293350A9b66e40aF00E59645020) |
+| Deploy tx | [`0x659793a7…c068c0`](https://sepolia.basescan.org/tx/0x659793a76cc1a0d4076a6f236b61df72c1be39d81fa0246f8479ed7cfdc068c0) |
+| First anchor | [`0x8fb2c862…e7d3a1`](https://sepolia.basescan.org/tx/0x8fb2c862953d342ede8b2ab42e2701ff73e435859993769d480d160c8ee7d3a1) |
+| Signer | `0x5aB3036C7d0bA7043E0BB531374dC6c732eC4954` |
+| Chain | Base **Sepolia**, id 84532 |
+
+The first anchor is the real head of this repository's live audit ledger —
+355 events at the time, not a synthetic hash:
+
+```
+LEDGER_EVENTS=355
+HEAD=778c4282f2f3698dfe8a6ad58053ce0ae51eb5b666b59e0bdc2693939edf4b69
+TX=0x8fb2c862953d342ede8b2ab42e2701ff73e435859993769d480d160c8ee7d3a1
+```
+
+Verified with `cast` against the public RPC:
+
+```
+status               1 (success)
+blockNumber          45910360
+gasUsed              70228
+latestHash           0x778c4282f2f3698dfe8a6ad58053ce0ae51eb5b666b59e0bdc2693939edf4b69
+verifyHead(real)     true
+verifyHead(tampered) false
+```
+
+The on-chain head equals the local ledger head byte for byte, and a
+tampered claim is rejected — the property the whole mechanism exists for.
+
+**Sepolia, not mainnet.** These are testnet transactions with no economic
+weight. The signing, encoding and contract logic are identical on mainnet;
+the funding is not.
+
+**Deploying for real found three bugs the anvil proof could not.** Anchors
+fire from a goroutine per blocked decision, so a burst raced on one nonce;
+`prevHash` was being taken from the local ledger while the contract compares
+against the previously *anchored* hash, which made every anchor after the
+first revert on continuity; and reading the confirmed head while a prior
+anchor was still pending reproduced the same collision. All three are fixed
+in [`audit/base_anchor.go`](pkg/query-service/vigil/audit/base_anchor.go) and
+[`base_anchor_tx.go`](pkg/query-service/vigil/audit/base_anchor_tx.go). The
+local proof passed throughout, because it anchored two deliberately adjacent
+hashes and never submitted two at once.
 
 ---
 
@@ -294,16 +344,19 @@ id will not resolve. Public anchoring still needs a funded signer, and
 | Partner | Where | Status |
 |---|---|---|
 | **Sibyl Memory** | [`services/sibyl-memory/`](services/sibyl-memory/), [`vigil/sibyl/`](pkg/query-service/vigil/sibyl/) | **Live.** Load-bearing; deletion test above. |
-| **Base** — audit anchoring | [`audit/base_anchor.go`](pkg/query-service/vigil/audit/base_anchor.go), [`contracts/VigilAnchor.sol`](contracts/VigilAnchor.sol) | Code-complete, **unexecuted** — no funded signer. |
+| **Base** — audit anchoring | [`audit/base_anchor.go`](pkg/query-service/vigil/audit/base_anchor.go), [`contracts/VigilAnchor.sol`](contracts/VigilAnchor.sol) | **Live on Base Sepolia.** Contract `0x03164E72…5020`, anchors verified status 1. Mainnet unfunded. |
 | **Base** — x402 payments | [`cost/x402.go`](pkg/query-service/vigil/cost/x402.go), [`x402_verify.go`](pkg/query-service/vigil/cost/x402_verify.go) | Code-complete, **unexecuted**. Inbound only. |
-| **Virtuals ACP** | [`pkg/acp/service.go`](pkg/acp/service.go) | Job evaluation live and memory-backed; on-chain registration pending a signer. |
+| **Virtuals ACP** | [`pkg/acp/service.go`](pkg/acp/service.go) | Job evaluation live, memory-backed, **now tested** ([`service_test.go`](pkg/acp/service_test.go)). On-chain registration pending a mainnet signer. |
 | **HydraDB** | [`vigil/hydra/`](pkg/query-service/vigil/hydra/) | Live. Now a *fallback* behind memory. |
 | **Featherless / NVIDIA / Gemini** | [`vigil/llm/chain.go`](pkg/query-service/vigil/llm/chain.go) | NVIDIA + Gemini verified live. Last resort only. |
 
-**Nothing has been executed on-chain.** No Basescan transaction hash is
-claimed anywhere in this repository, because no funded wallet exists yet.
-Everything on-chain activates on `VIGIL_BASE_PRIVATE_KEY` and reports its
-unconfigured state honestly rather than fabricating a receipt.
+**What is and is not on-chain.** Base anchoring is executed on Base
+Sepolia — contract, transactions and receipts above, all independently
+checkable. x402 and Virtuals ACP registration are not: both need a mainnet
+signer, and ACP registration additionally needs a Virtuals entity id. They
+activate on `VIGIL_ACP_PRIVATE_KEY` and report their unconfigured state
+rather than fabricating a receipt. No transaction hash appears in this
+repository that was not produced by a real chain.
 
 ---
 
