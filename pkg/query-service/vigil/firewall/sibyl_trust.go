@@ -172,11 +172,19 @@ func (f *Firewall) recordSibylViolation(ctx context.Context, res Result) {
 		})
 	}
 
-	// Below the archive floor the agent leaves the active working set. The
-	// record persists in archived_entities: a ban has to stay auditable.
-	if trust.TrustScore < sibyl.TrustArchive {
+	// At or below the archive floor the agent leaves the active working set.
+	// The record persists in archived_entities: a ban has to stay auditable.
+	//
+	// The comparison is `<=`, not `<`, and that is load-bearing. The ladder
+	// terminates at exactly TrustArchive: the second recorded violation puts
+	// a clean agent at 10, and from then on every call short-circuits at the
+	// memory stage, which firewall.go deliberately excludes from recording
+	// (otherwise a banned agent's trust would decay forever on retries). So
+	// 10 is a floor the agent sits on, never a value it passes through, and
+	// a strict `<` made this branch unreachable by any sequence of strikes.
+	if trust.TrustScore <= sibyl.TrustArchive {
 		if err := f.deps.Sibyl.Archive(ctx, "agent", agentID,
-			fmt.Sprintf("trust %d below floor %d after %d violations",
+			fmt.Sprintf("trust %d at or below floor %d after %d violations",
 				trust.TrustScore, sibyl.TrustArchive, trust.TotalBlocks)); err != nil {
 			f.deps.Logger.WarnContext(ctx, "vigil: archive failed", "agent", agentID, "error", err.Error())
 		}

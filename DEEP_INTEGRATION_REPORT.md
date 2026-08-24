@@ -15,7 +15,7 @@ contradicted an expectation, the contradiction is reported, not smoothed.
 |---|---|---|
 | 1 | Memory sits on the critical path | **DEEP** |
 | 2 | Memory enforces, it does not merely log | **DEEP** |
-| 3 | All five tiers carry live data | **PARTIAL** — 4/5 |
+| 3 | All five tiers carry live data | **DEEP** — 5/5 (ARCHIVE fixed, see addendum) |
 | 4 | Cross-session persistence is real | **DEEP** |
 | 5 | Deletion breaks the product | **DEEP** |
 | 6 | Base + Virtuals do real work | **PARTIAL** — code real, mainnet unproven |
@@ -125,7 +125,13 @@ retries. The exclusion is deliberate and is why the ladder terminates.
 
 ---
 
-## CHECK 3 — Are all five tiers live? **PARTIAL — 4 of 5**
+## CHECK 3 — Are all five tiers live? ~~**PARTIAL — 4 of 5**~~ → **DEEP**
+
+> **Superseded by the addendum at the end of this report.** The finding below
+> is the audit as it stood, kept intact because it is the record of what was
+> measured. The defect it names has since been fixed and the fix verified;
+> the addendum has the evidence, including a second, worse bug the fix
+> exposed. What follows is what was true at audit time.
 
 Measured against `/tmp/gate.db`, produced by a full server run:
 
@@ -396,8 +402,7 @@ load-bearing, demonstrated by running it rather than by describing it.
 
 Three qualifications, none architectural:
 
-- **ARCHIVE tier is unreachable** — `TrustArchive = 10` versus `< 10` while
-  the ladder floors at 10. One-character fix, real defect.
+- ~~**ARCHIVE tier is unreachable**~~ — **fixed, see the addendum below.**
 - **On-chain paths are unproven on mainnet** — real code, honest gating, no
   public artifact.
 - **`pkg/acp` has no tests** — the marketplace-reputation benefit is the one
@@ -407,3 +412,81 @@ Scoring note for anyone using this report: the distinction between shallow and
 deep here is not the amount of memory code, it is stage ordering and
 short-circuit authority. Both are verifiable in a single grep and a single
 deletion, and both were run.
+
+---
+
+## ADDENDUM — CHECK 3 resolved: ARCHIVE tier now fires
+
+`sibyl_trust.go:177` now reads `if trust.TrustScore <= sibyl.TrustArchive`.
+`TrustArchive` stays at 10; the comparison changed, because 10 is a floor the
+ladder comes to rest on rather than a value it passes through, and a strict
+`<` therefore excluded the only reachable score.
+
+Live test: `sibyl_archive_live_test.go`, gated on `VIGIL_SIBYL_URL` so the
+offline suite stays green. Run against a real `services/sibyl-memory`:
+
+```
+strike 1: BLOCK at stage code_graph
+strike 2: PAUSE at stage sibyl_memory — trust 30 — pausing for human review
+archived_entities 0 -> 1
+archived at trust 10 after 2 strikes, still banned from [run_command]
+fresh firewall, no denylist: BLOCK at stage sibyl_memory — trust 10 after
+  2 prior violations (banned: [run_command]) — recalled in 0.77ms
+--- PASS: TestLiveArchiveTier
+```
+
+Direct SQLite assertion on the file the service wrote:
+
+```
+select count(*) from archived_entities -> 1
+  ('agent', 'archive-probe-...', 'trust 10 at or below floor 10 after 2 violations')
+```
+
+**The fix uncovered a worse bug than the one being fixed.** Archiving moves
+the row out of `entities`, so the very next `/recall` returned `found=false` —
+which the firewall reads as *an agent it has never seen* and starts back at
+`TrustDefault = 50`. Making the archive branch reachable would, on its own,
+have turned archival into an amnesty: the harshest sanction in the ladder
+would have been the one that cleared an agent's record.
+
+That is why the branch being dead had gone unnoticed. Nothing downstream had
+ever been exercised.
+
+Fix: `/recall` in `services/sibyl-memory/app.py` falls back to the ARCHIVE
+tier on a miss (`_archived_entity`). The archived row carries the same trust
+body, so the ban survives the move. The test asserts this directly — a fresh
+firewall with **no denylist wired at all** still BLOCKs the archived agent
+from the archive alone, and fails with an explicit message if it does not.
+
+`/stats` now also reports `archived_entities`; it previously reported four of
+five tiers, which is how the ARCHIVE tier stayed broken without anyone seeing
+it on the dashboard.
+
+Tier counts from the gate demo after the fix — all five now carry data in a
+single run (REFERENCE excepted, which is server-seeded, per CHECK 4):
+
+```
+  state_documents        2 rows
+  entities               1 rows
+  journal_events         4 rows
+  reference_documents    0 rows
+  archived_entities      1 rows
+```
+
+`go build ./...` green, `go test ./pkg/query-service/vigil/...` all packages
+ok, and the gate demo still passes:
+
+```
+attempt 1/3  BLOCK  stage=code_graph     trust=50   recall=1.55ms
+attempt 2/3  PAUSE  stage=sibyl_memory   trust=30   recall=1.11ms
+attempt 3/3  BLOCK  stage=sibyl_memory   trust=10   recall=1.67ms
+session 2    BLOCK  stage=sibyl_memory   trust=10   recall=2.14ms
+deleted      ALLOW  stage=default        trust=n/a
+GATE PASSED
+```
+
+One correction to CHECK 8 while here: the report said archival was reached on
+a fourth strike. It is reached on the **second recorded** strike. Strike 1
+(50→30) and strike 2 (30→10) are recorded; from then on every call
+short-circuits at the memory stage, which `firewall.go:829` deliberately
+excludes from recording, so there is no third or fourth strike to wait for.

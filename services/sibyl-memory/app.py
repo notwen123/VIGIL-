@@ -37,7 +37,9 @@ Five tiers, and what VIGIL puts in each:
 
 from __future__ import annotations
 
+import json
 import os
+import sqlite3
 import time
 from pathlib import Path
 from typing import Any
@@ -180,8 +182,47 @@ def recall(q: RecallQuery) -> dict[str, Any]:
     try:
         rec = client().get_entity(q.category, q.name)
     except NotFoundError:
-        return {"ok": True, "found": False, "entity": None, "latency_ms": _ms(started)}
+        rec = _archived_entity(q.category, q.name)
+        if rec is None:
+            return {"ok": True, "found": False, "entity": None, "latency_ms": _ms(started)}
     return {"ok": True, "found": True, "entity": rec, "latency_ms": _ms(started)}
+
+
+def _archived_entity(category: str, name: str) -> dict[str, Any] | None:
+    """Fall back to the ARCHIVE tier when the active set has no record.
+
+    Archiving moves the row out of `entities`, so without this a banned
+    agent's next session would get found=false — which the firewall reads as
+    'first time we have seen this agent' and starts back at the default
+    trust of 50. Retiring an agent from the working set would silently
+    un-ban it, which is the exact opposite of what archiving is for. The
+    archived row carries the same trust body, so the ban survives.
+    """
+    path = Path(DB_PATH).expanduser()
+    if not path.exists():
+        return None
+    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        row = con.execute(
+            "select body, archived_at, archive_reason from archived_entities "
+            "where tenant_id = ? and category = ? and name = ? "
+            "order by archived_at desc limit 1",
+            (TENANT_ID, category, name),
+        ).fetchone()
+    except sqlite3.Error:
+        return None
+    finally:
+        con.close()
+    if row is None or row[0] is None:
+        return None
+    return {
+        "category": category,
+        "name": name,
+        "body": json.loads(row[0]),
+        "status": "archived",
+        "archived_at": row[1],
+        "archive_reason": row[2],
+    }
 
 
 @app.post("/search")
@@ -283,9 +324,33 @@ def stats() -> dict[str, Any]:
         "warm_entities": len(entities),
         "warm_by_category": by_category,
         "cold_events": len(events),
+        "archived_entities": _archived_count(),
         "db_bytes": path.stat().st_size if path.exists() else 0,
         "vectors": 0,
     }
+
+
+def _archived_count() -> int:
+    """Rows in the ARCHIVE tier.
+
+    Read straight from SQLite because the SDK exposes archive_entity() but
+    no way to list what it archived, and a dashboard that shows four of five
+    tiers is how the ARCHIVE tier stayed broken without anyone noticing.
+    Read-only, on the same file the client already has open.
+    """
+    path = Path(DB_PATH).expanduser()
+    if not path.exists():
+        return 0
+    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        return con.execute(
+            "select count(*) from archived_entities where tenant_id = ?", (TENANT_ID,)
+        ).fetchone()[0]
+    except sqlite3.Error:
+        # The table only exists once the SDK has initialised the schema.
+        return 0
+    finally:
+        con.close()
 
 
 def _ms(started: float) -> float:
