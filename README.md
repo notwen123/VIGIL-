@@ -1,3 +1,16 @@
+## VIGIL MEMORY — See [MEMORY.md](./MEMORY.md) for the load-bearing memory map with exact file:line
+
+VIGIL now remembers agents across sessions, devices and restarts. The deletion
+test, the five-tier map, and every `file:line` a judge needs are in
+**[MEMORY.md](./MEMORY.md)** — start there.
+
+**Licensing:** original VIGIL MEMORY code (`pkg/query-service/vigil/`,
+`pkg/acp/`, `services/`) is MIT — see [LICENSE.MIT](./LICENSE.MIT). The
+inherited SigNoz fork remains Apache-2.0 — see [LICENSE](./LICENSE). The root
+licence is not changed, because that code is not ours to relicense.
+
+---
+
 # VIGIL
 
 <p align="center">

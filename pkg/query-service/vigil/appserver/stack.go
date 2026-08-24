@@ -157,6 +157,11 @@ func buildStack(logger *slog.Logger, budgetLimit float64) *stack {
 	mem := sibyl.NewFromEnv(logger)
 	anchorer := audit.NewAnchorerFromEnv(logger)
 	acpSvc := acp.New(mem, logger)
+	// HOT tier writer and the x402 payment rail. Both were previously
+	// constructed but never reached the firewall, which made them dead code
+	// (F-03 / F-06 in AUDIT_REPORT.md).
+	sessionMem := cost.NewSessionMemory(mem, logger)
+	x402 := cost.NewRailFromEnv()
 
 	fw := firewall.New(firewall.Deps{
 		Logger:      logger,
@@ -169,6 +174,8 @@ func buildStack(logger *slog.Logger, budgetLimit float64) *stack {
 		Hydra:       hydraClient,
 		Compromised: firewall.NewCompromisedList(),
 		Sibyl:       mem,
+		SessionMem:  sessionMem,
+		X402:        x402,
 		Anchorer:    anchorer,
 	})
 
@@ -214,7 +221,7 @@ func buildStack(logger *slog.Logger, budgetLimit float64) *stack {
 	return &stack{
 		fw: fw, policies: policies, gov: gov, heal: heal, router: router,
 		ledger: ledger, hydra: hydraClient,
-		sibyl: mem, anchorer: anchorer, acp: acpSvc, x402: cost.NewRailFromEnv(),
+		sibyl: mem, anchorer: anchorer, acp: acpSvc, x402: x402,
 	}
 }
 

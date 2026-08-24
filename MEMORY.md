@@ -6,9 +6,16 @@ Kill the terminal and VIGIL used to forget everything. The agent would try
 `pip install reqeusts` again, and you would pay an LLM to work out — again —
 that it is a typosquat of `requests`. This is the layer that stops that.
 
-Trust lives in a SQLite file, not in a context window. An agent can have 500
-sessions of 115k tokens each; recalling that it is on strike three still
-takes about a millisecond and costs nothing.
+Trust lives in a SQLite file, not in a context window. Recall is a keyed
+lookup, not history replayed into a prompt: **measured p95 = 0.007 ms** over
+2,500 rows on a cold client (`services/sibyl-memory/bench_scale.py`).
+
+One honest limit, found by running the benchmark rather than assuming: the
+`sibyl-memory-client` free tier is **capped at 2 MB**, so the "500 sessions x
+115k tokens" figure could not be tested at that size — the write phase raises
+`CapExceededError` first. Latency is flat and index-backed, so it is very
+likely to hold, but *likely is not measured* and this document will not claim
+it until it is. See §5.
 
 ---
 
@@ -224,6 +231,14 @@ package, not by reading its docs:
 This is *why* memory can sit ahead of HydraDB and Featherless. An embedding
 round-trip cannot compete, and does not need to: agent trust is a keyed
 lookup, not a similarity search.
+
+**Offline, with one measured caveat.** Verified by blocking every outbound
+socket and then writing and reading: a normal operation under the 2 MB free
+tier completes with **zero network calls**. Above that cap the client contacts
+`api.sibyllabs.org/api/plugin/check-write` for cap enforcement unless the
+account is activated. So "no network egress" is true for the free tier as
+shipped, and stops being true past 2 MB — stated here rather than discovered
+later.
 
 Three SDK method names differ from the obvious guess, found by introspection:
 

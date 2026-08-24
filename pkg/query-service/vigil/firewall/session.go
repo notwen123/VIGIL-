@@ -38,6 +38,38 @@ type Session struct {
 	cost    float64
 	spans   []engine.TraceSpan
 	samples []sample
+
+	// The three fields below exist so Commit() can write the HOT memory
+	// tier. Commit's signature is fixed by mcp.CommitFn and carries only
+	// (sessionID, tool, cost, duration, ok) — it has no budget, no intent
+	// and no violation count. Rather than widen a cross-package interface,
+	// Check() parks what it already knows here and Commit() reads it back.
+	budget     float64
+	intent     string
+	violations int
+}
+
+// NoteContext records the declared budget and intent seen during Check, so
+// the HOT-tier write in Commit has something truthful to persist.
+func (s *Session) NoteContext(budget float64, intent string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.budget = budget
+	s.intent = intent
+}
+
+// NoteViolation increments this session's refusal count.
+func (s *Session) NoteViolation() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.violations++
+}
+
+// HotState returns the fields the HOT memory tier persists.
+func (s *Session) HotState() (budgetLeft float64, intent string, violations int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.budget - s.cost, s.intent, s.violations
 }
 
 func newSession(id string) *Session {

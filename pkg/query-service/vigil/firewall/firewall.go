@@ -12,6 +12,7 @@ import (
 
 	"github.com/SigNoz/signoz/pkg/query-service/vigil"
 	"github.com/SigNoz/signoz/pkg/query-service/vigil/audit"
+	"github.com/SigNoz/signoz/pkg/query-service/vigil/cost"
 	"github.com/SigNoz/signoz/pkg/query-service/vigil/engine"
 	"github.com/SigNoz/signoz/pkg/query-service/vigil/hydra"
 	"github.com/SigNoz/signoz/pkg/query-service/vigil/llm"
@@ -115,6 +116,10 @@ type Result struct {
 	// (entity_policy.go) — the alias-merge chain that explains the block,
 	// whether or not it fired.
 	EntityPolicy *EntityPolicyReport `json:"entity_policy,omitempty"`
+	// Payment is the x402 challenge attached to a budget-exhausted BLOCK:
+	// the terms an agent needs to top itself up and retry. Nil for every
+	// other refusal — trust failures are not purchasable.
+	Payment *cost.Challenge `json:"payment_required,omitempty"`
 	// Sibyl carries the cross-session memory evidence behind a decision:
 	// the recalled trust score, strike count and standing bans that let a
 	// freshly started process block an agent it has never itself seen.
@@ -149,6 +154,15 @@ type Deps struct {
 	// rather than silently allowing the call. See the deletion test in
 	// README.md.
 	Sibyl *sibyl.Client
+	// SessionMem writes the HOT tier after every executed call. Nil is a
+	// safe no-op, but it means set_state is never written and the HOT tier
+	// is dead — which is exactly the defect F-03 in AUDIT_REPORT.md names.
+	SessionMem *cost.SessionMemory
+	// X402 issues HTTP 402 payment challenges when a session's budget is
+	// exhausted, so a productive agent can top itself up instead of dying
+	// at 3am with no human awake. Nil, or unconfigured, and an exhausted
+	// budget simply blocks as before.
+	X402 *cost.Rail
 	// Anchorer publishes ledger links to Base. Nil, or configured without a
 	// signer, means the ledger stays local-only — a documented state, not a
 	// silent one. See audit/base_anchor.go.
@@ -159,8 +173,9 @@ type Deps struct {
 
 // Firewall is the decision pipeline.
 type Firewall struct {
-	deps     Deps
-	sessions *Sessions
+	deps       Deps
+	sessions   *Sessions
+	sessionMem *cost.SessionMemory
 
 	mu     sync.Mutex
 	recent []Result
@@ -179,7 +194,7 @@ func New(d Deps) *Firewall {
 	if d.RecentSize <= 0 {
 		d.RecentSize = 200
 	}
-	return &Firewall{deps: d, sessions: newSessions()}
+	return &Firewall{deps: d, sessions: newSessions(), sessionMem: d.SessionMem}
 }
 
 // Policies exposes the policy store for the HTTP layer.
@@ -219,6 +234,9 @@ func (f *Firewall) Check(ctx context.Context, c Call) Result {
 
 	sess := f.sessions.Get(c.SessionID)
 	pol := f.deps.Policies.GetOrDefault(c.SessionID, c.Budget)
+	// Park what only Check knows, so Commit's HOT-tier write persists a real
+	// budget and intent rather than zeroes.
+	sess.NoteContext(c.Budget, pol.DeclaredIntent)
 
 	res := Result{
 		Tool:      c.Tool,
@@ -397,6 +415,29 @@ func (f *Firewall) Check(ctx context.Context, c Call) Result {
 		res.Decision, res.Stage = Block, StageForecast
 		res.Reason = fmt.Sprintf("budget exhausted: $%.4f of $%.2f", fc.CurrentCost, fc.Budget)
 		res.Message = "Vigil blocked this call: " + res.Reason
+
+		// x402: offer a way out instead of a dead end.
+		//
+		// A blocked-for-budget call is the one refusal that is not about
+		// trust — the agent did nothing wrong, it just ran out of money.
+		// Attaching a payment challenge lets it top itself up and retry,
+		// which matters most in exactly the case a human is least likely
+		// to be watching. Still a BLOCK: the call does not proceed until
+		// payment is presented and verified on chain.
+		if f.deps.X402.Enabled() {
+			overspend := fc.CurrentCost - fc.Budget
+			if ch, ok := f.deps.X402.Challenge(c.SessionID, overspend); ok {
+				res.Payment = &ch
+				res.Message += fmt.Sprintf(
+					" — pay %s USDC to %s on chain %d and retry (nonce %s)",
+					ch.AmountUSDC, ch.Recipient, ch.ChainID, ch.Nonce)
+				f.deps.Logger.InfoContext(ctx, "vigil: issued x402 payment challenge",
+					slog.String("session", c.SessionID),
+					slog.String("amount_usdc", ch.AmountUSDC),
+					slog.String("nonce", ch.Nonce),
+					slog.Int64("chain_id", ch.ChainID))
+			}
+		}
 		return f.finish(ctx, span, sess, res)
 	}
 	if fc.State == StateSoftLimit {
@@ -651,6 +692,26 @@ func (f *Firewall) Commit(sessionID, tool string, cost float64, dur time.Duratio
 		Name: tool, Kind: "tool", Duration: dur, Status: status,
 	})
 	sess.RecordCost(cost, time.Now())
+
+	// HOT tier: rewrite this session's live state after every executed call.
+	//
+	// Commit is the right hook precisely because it only runs for calls that
+	// actually ran — a blocked call costs nothing and must not consume
+	// budget. Upsert, not append: one row per session, rewritten in place,
+	// so the row count stays flat however long a session runs.
+	//
+	// Best-effort by design. The authoritative budget lives in this process;
+	// this is a durable projection of it, and refusing an agent's work
+	// because a projection could not be written would be the wrong trade.
+	if f.sessionMem != nil {
+		budgetLeft, intent, violations := sess.HotState()
+		f.sessionMem.Record(context.Background(), sessionID, sibyl.SessionState{
+			BudgetLeft:            budgetLeft,
+			Intent:                intent,
+			ViolationsThisSession: violations,
+			LastTool:              tool,
+		})
+	}
 }
 
 // Forecast returns a session's current cost projection.
@@ -698,6 +759,9 @@ func (f *Firewall) finish(ctx context.Context, span telemetry.Span, sess *Sessio
 	// seeing.
 	if res.Decision != Allow {
 		sess.RecordSpan(engine.TraceSpan{Name: res.Tool, Kind: "tool", Status: "blocked"})
+		// Counted for the HOT tier so a resumed session can see how much
+		// trouble it has already caused without re-deriving it.
+		sess.NoteViolation()
 	}
 
 	// Audit every decision, not just the blocks. A trail that records only

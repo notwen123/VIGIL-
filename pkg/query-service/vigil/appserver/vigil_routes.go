@@ -23,6 +23,15 @@ import (
 // is latched closed: a PAUSE requires a human to release it via the existing
 // session-approve endpoint, a BLOCK refuses this one call.
 func (st *stack) mcpAdapter() (mcp.FirewallFn, mcp.CommitFn) {
+	// paymentOrNil avoids handing MCP a typed-nil pointer inside an
+	// interface, which compares non-nil at the far end.
+	paymentOrNil := func(res firewall.Result) any {
+		if res.Payment == nil {
+			return nil
+		}
+		return res.Payment
+	}
+
 	check := func(ctx context.Context, in mcp.FirewallInput) mcp.FirewallVerdict {
 		res := st.fw.Check(ctx, firewall.Call{
 			SessionID:   in.SessionID,
@@ -39,6 +48,9 @@ func (st *stack) mcpAdapter() (mcp.FirewallFn, mcp.CommitFn) {
 			Decision:     string(res.Decision),
 			Reason:       res.Reason,
 			Message:      res.Message,
+			// nil unless the refusal was budget-only; the agent gets the
+			// exact amount, recipient, chain and nonce it needs to pay.
+			PaymentRequired: paymentOrNil(res),
 		}
 	}
 	commit := func(sessionID, tool string, cost float64, dur time.Duration, ok bool) {

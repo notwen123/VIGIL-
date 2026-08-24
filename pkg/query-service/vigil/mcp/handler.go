@@ -134,6 +134,11 @@ type FirewallVerdict struct {
 	Decision     string // ALLOW | PAUSE | BLOCK | FALLBACK
 	Reason       string
 	Message      string // agent-facing text when not allowed
+	// PaymentRequired carries x402 terms when a call was refused purely for
+	// budget. Present only on that one refusal — trust failures are not
+	// purchasable — and it is what lets an agent top itself up and retry
+	// instead of stalling until a human wakes up.
+	PaymentRequired any
 }
 
 // FirewallFn decides whether a tool call may proceed.

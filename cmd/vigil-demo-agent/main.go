@@ -22,6 +22,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/SigNoz/signoz/pkg/query-service/vigil/cost"
 	"github.com/SigNoz/signoz/pkg/query-service/vigil/firewall"
 	"github.com/SigNoz/signoz/pkg/query-service/vigil/policy"
 	"github.com/SigNoz/signoz/pkg/query-service/vigil/sibyl"
@@ -67,9 +68,14 @@ func main() {
 	compromised := firewall.NewCompromisedList()
 
 	fw := firewall.New(firewall.Deps{
-		Logger:      logger,
-		Policies:    store,
-		Sibyl:       mem,
+		Logger:   logger,
+		Policies: store,
+		Sibyl:    mem,
+		// HOT tier writer, so this harness exercises the same set_state
+		// path the server does — otherwise the demo would prove the trust
+		// ladder while leaving state_documents empty.
+		SessionMem:  cost.NewSessionMemory(mem, logger),
+		X402:        cost.NewRailFromEnv(),
 		Compromised: compromised,
 		// No Hydra and no Router on purpose: whatever this prints was
 		// decided without a graph query and without an LLM call.
@@ -124,6 +130,17 @@ func main() {
 		}
 		if res.Reason != "" {
 			fmt.Printf("      %s\n", truncate(res.Reason, 150))
+		}
+
+		// Commit is what the MCP gateway calls after a tool actually runs,
+		// and it is where the HOT tier is written. Only allowed calls reach
+		// it — a blocked call costs nothing and must not consume budget.
+		if res.Decision == firewall.Allow {
+			fw.Commit(*sessionID, *tool, 0.01, 5*time.Millisecond, true)
+		} else {
+			// A refused call still updates HOT state (violations, last tool)
+			// without charging for it, so a resumed session sees the truth.
+			fw.Commit(*sessionID, *tool, 0, 0, false)
 		}
 
 		// The journal write is fire-and-forget; give it a beat so the next

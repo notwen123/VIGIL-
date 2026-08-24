@@ -1,0 +1,16 @@
+{
+  "name": "vigil-acp-node",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Thin ACP transport bridge: registers VIGIL as a provider on Base and forwards inbound jobs to the Go decision engine. Contains no decision logic of its own.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "register": "node index.js --register-only"
+  },
+  "dependencies": {
+    "@virtuals-protocol/acp-node": "^0.3.0-beta.40"
+  },
+  "engines": { "node": ">=20" }
+}
