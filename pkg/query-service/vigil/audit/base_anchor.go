@@ -73,6 +73,26 @@ type Anchorer struct {
 	mu   sync.Mutex
 	// last holds the most recent receipt for the dashboard.
 	last []AnchorReceipt
+
+	// send serialises transaction submission. Anchoring is called from a
+	// fire-and-forget goroutine per blocked decision, so a burst of blocks
+	// used to submit concurrently — and every one of them read the same
+	// PendingNonceAt, signed a different payload against that one nonce,
+	// and raced. At most one could land; the rest died as replacements. A
+	// concurrent dial storm also got throttled by the public RPC, which
+	// surfaced as `chain id: context deadline exceeded` rather than as
+	// anything mentioning nonces.
+	//
+	// Serialising is the correct fix and not merely the cheap one: nonces
+	// are inherently sequential per account, so there is no concurrency to
+	// win here. Anchoring is already off the request path.
+	//
+	// ponytail: one lock per anchorer; if anchoring ever needs throughput,
+	// batch several links into one tx rather than parallelising nonces.
+	send sync.Mutex
+	// lastAnchored is the hash most recently submitted, guarded by send.
+	// Empty means "not yet known" — the next send reads it from chain.
+	lastAnchored string
 }
 
 // anchorSelector is the 4-byte selector for
@@ -155,7 +175,9 @@ func (a *Anchorer) Anchor(ctx context.Context, decisionHash, prevHash string) (A
 		return rec, nil
 	}
 
+	a.send.Lock()
 	txHash, err := a.sendAnchorTx(ctx, decisionHash, prevHash)
+	a.send.Unlock()
 	if err != nil {
 		return rec, fmt.Errorf("vigil: base anchor failed: %w", err)
 	}

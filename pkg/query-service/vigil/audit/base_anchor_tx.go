@@ -66,6 +66,40 @@ func (a *Anchorer) sendAnchorTx(ctx context.Context, decisionHash, prevHash stri
 	from := crypto.PubkeyToAddress(a.privateKey.PublicKey)
 	to := common.HexToAddress(a.contract)
 
+	// The anchored sequence is its own chain, so prevHash must be whatever
+	// this signer last anchored — not the decision's predecessor in the
+	// local ledger.
+	//
+	// Those two are not the same thing, and conflating them made every
+	// anchor after the first revert. VigilAnchor.anchor() requires
+	// prevHash == latestHash[msg.sender], while the firewall anchors only
+	// BLOCKs (firewall/sibyl_trust.go: allows are skipped to avoid spending
+	// gas on ordinary traffic). Consecutive blocks are therefore almost
+	// never adjacent in the ledger, so the ledger's prevHash did not match
+	// the on-chain head and the continuity guard correctly rejected it. The
+	// anvil proof missed this because it anchored two deliberately adjacent
+	// hashes.
+	//
+	// Read from chain rather than cached in memory so this is still correct
+	// after a restart, and correct if some other process anchored for the
+	// same signer.
+	// lastAnchored is what we most recently *submitted*, which is ahead of
+	// what the chain reports until that tx is mined. Preferring it closes a
+	// time-of-check race: two anchors a couple of seconds apart both read
+	// the same confirmed head, both built the same prevHash, and the second
+	// reverted once the first landed. Only the first send needs the chain
+	// read, and that read is what makes this correct across a restart.
+	if a.lastAnchored == "" {
+		onChainHead, err := a.onChainHead(ctx, cl, from)
+		if err != nil {
+			return "", fmt.Errorf("read anchored head: %w", err)
+		}
+		a.lastAnchored = onChainHead
+	}
+	if a.lastAnchored != "" {
+		prevHash = a.lastAnchored
+	}
+
 	data, err := calldata(decisionHash, prevHash, uint64(time.Now().Unix()))
 	if err != nil {
 		return "", err
@@ -119,5 +153,35 @@ func (a *Anchorer) sendAnchorTx(ctx context.Context, decisionHash, prevHash stri
 	if err := cl.SendTransaction(ctx, signed); err != nil {
 		return "", fmt.Errorf("send: %w", err)
 	}
+	// Advance our view of the chain head only once the tx is accepted by
+	// the node. On a send failure it must stay put, or every subsequent
+	// anchor would build on a link that was never published.
+	a.lastAnchored = strings.TrimPrefix(decisionHash, "0x")
 	return signed.Hash().Hex(), nil
+}
+
+// onChainHead returns the last hash this signer anchored, or "" if it has
+// never anchored. Used as the prevHash for the next link, because the
+// contract's continuity guard compares against the anchored chain rather
+// than the local ledger.
+func (a *Anchorer) onChainHead(ctx context.Context, cl *ethclient.Client, from common.Address) (string, error) {
+	sel := keccak([]byte("latestHash(address)"))[:4]
+	data := make([]byte, 0, 4+32)
+	data = append(data, sel...)
+	data = append(data, common.LeftPadBytes(from.Bytes(), 32)...)
+
+	to := common.HexToAddress(a.contract)
+	out, err := cl.CallContract(ctx, ethereum.CallMsg{To: &to, Data: data}, nil)
+	if err != nil {
+		return "", err
+	}
+	if len(out) != 32 {
+		return "", fmt.Errorf("latestHash returned %d bytes, want 32", len(out))
+	}
+	// The zero word means "never anchored", which the contract treats as
+	// genesis. Reporting it as "" keeps that distinction in one place.
+	if common.BytesToHash(out) == (common.Hash{}) {
+		return "", nil
+	}
+	return common.Bytes2Hex(out), nil
 }

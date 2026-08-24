@@ -34,3 +34,7 @@ vigil-audit.jsonl
 # dataset here on first run, and regenerates the sampling manifest every
 # run — neither belongs in git.
 scripts/data/
+
+# Foundry build artifacts (contracts/)
+/cache/
+/out/
