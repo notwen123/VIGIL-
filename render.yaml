@@ -14,7 +14,7 @@ services:
       - key: VIGIL_ORG_ID
         value: "default"
       - key: VIGIL_PUBLIC_BASE
-        value: "https://vigil-hydra.onrender.com"
+        value: "https://vigil-cuy2.onrender.com"
       - key: VIGIL_DASHBOARD_BASE
         value: "https://vigil-featherless.vercel.app"
 
@@ -30,7 +30,7 @@ services:
 
       # ── Sibyl Memory (points at the second service below) ────────────────────
       - key: VIGIL_SIBYL_URL
-        value: "https://vigil-sibyl-memory.onrender.com"
+        sync: false
 
       # ── NVIDIA NIM inference ─────────────────────────────────────────────────
       - key: VIGIL_NVIDIA_API_KEY
