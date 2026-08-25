@@ -1,44 +1,38 @@
 services:
+  # ── 1. VIGIL backend (Go) ────────────────────────────────────────────────────
   - type: web
-    name: vigil-server
+    name: vigil-hydra
     env: docker
     dockerfilePath: ./Dockerfile
     region: oregon
     plan: free
     healthCheckPath: /api/v1/vigil/stats
     envVars:
-      # ── Required ──────────────────────────────────────────────────────────────
-      # The public URL Render assigns to this service (fill after first deploy)
-      # e.g. https://vigil-server.onrender.com
+      # ── Core ────────────────────────────────────────────────────────────────
+      - key: VIGIL_ADDR
+        value: ":8080"
+      - key: VIGIL_ORG_ID
+        value: "default"
       - key: VIGIL_PUBLIC_BASE
-        sync: false
-
-      # URL of your deployed Vercel frontend (fill after Vercel deploy)
-      # e.g. https://vigil.vercel.app
+        value: "https://vigil-hydra.onrender.com"
       - key: VIGIL_DASHBOARD_BASE
-        sync: false
+        value: "https://vigil-featherless.vercel.app"
 
-      # ── AI Inference (Featherless — optional; deterministic-only without it) ──
-      - key: VIGIL_FEATHERLESS_API_KEY
-        sync: false
+      # ── Budget & safety ──────────────────────────────────────────────────────
+      - key: VIGIL_BUDGET_LIMIT
+        value: "100"
+      - key: VIGIL_ALLOW_EXEC
+        value: "false"
 
-      # ── Model identifiers (required if the key above is set) ──────────────────
-      # Recommended: moonshotai/Kimi-K3 (fast, reasoner), zai-org/GLM-5.2 (reviewer)
-      - key: VIGIL_FEATHERLESS_MODEL_FAST
-        sync: false
-      - key: VIGIL_FEATHERLESS_MODEL_REASONER
-        sync: false
-      - key: VIGIL_FEATHERLESS_MODEL_REVIEWER
-        sync: false
+      # ── Audit log ────────────────────────────────────────────────────────────
+      - key: VIGIL_AUDIT_PATH
+        value: "./vigil-audit.jsonl"
 
-      # ── Observability (optional — backend runs without these) ─────────────────
-      - key: OTEL_EXPORTER_OTLP_ENDPOINT
-        sync: false
-      - key: OTEL_EXPORTER_OTLP_HEADERS
-        sync: false
+      # ── Sibyl Memory (points at the second service below) ────────────────────
+      - key: VIGIL_SIBYL_URL
+        value: "https://vigil-sibyl-memory.onrender.com"
 
-      # ── Budget & safety ───────────────────────────────────────────────────────
-      # ── NVIDIA NIM inference ──────────────────────────────────────────────────
+      # ── NVIDIA NIM inference ─────────────────────────────────────────────────
       - key: VIGIL_NVIDIA_API_KEY
         sync: false
       - key: VIGIL_NVIDIA_MODEL_FAST
@@ -48,7 +42,7 @@ services:
       - key: VIGIL_NVIDIA_MODEL_REVIEWER
         value: "nvidia/nemotron-3-ultra-550b-a55b"
 
-      # ── Gemini (fallback) ─────────────────────────────────────────────────────
+      # ── Gemini (fallback) ────────────────────────────────────────────────────
       - key: VIGIL_GEMINI_API_KEY
         sync: false
       - key: VIGIL_GEMINI_MODEL_FAST
@@ -58,18 +52,65 @@ services:
       - key: VIGIL_GEMINI_MODEL_REVIEWER
         value: "gemini-3.5-flash-lite"
 
-      # ── HydraDB (graph intelligence) ─────────────────────────────────────────
+      # ── Featherless (optional — slots in first when key is set) ──────────────
+      - key: VIGIL_FEATHERLESS_API_KEY
+        sync: false
+      - key: VIGIL_FEATHERLESS_MODEL_FAST
+        value: "moonshotai/Kimi-K3"
+      - key: VIGIL_FEATHERLESS_MODEL_REASONER
+        value: "moonshotai/Kimi-K3"
+      - key: VIGIL_FEATHERLESS_MODEL_REVIEWER
+        value: "zai-org/GLM-5.2"
+
+      # ── HydraDB ──────────────────────────────────────────────────────────────
       - key: VIGIL_HYDRADB_API_KEY
         sync: false
       - key: VIGIL_HYDRADB_DATABASE
         value: "vigil-os"
 
-      # ── Budget & safety ───────────────────────────────────────────────────────
-      - key: VIGIL_BUDGET_LIMIT
-        value: "100"
-      - key: VIGIL_ALLOW_EXEC
-        value: "false"
+      # ── Base / ACP identity ──────────────────────────────────────────────────
+      - key: VIGIL_BASE_RPC_URL
+        value: "https://sepolia.base.org"
+      - key: VIGIL_BASE_CHAIN_ID
+        value: "84532"
+      - key: VIGIL_BASE_CONTRACT
+        value: "0x03164E72ffEd3293350A9b66e40aF00E59645020"
+      - key: VIGIL_BASE_PRIVATE_KEY
+        sync: false
+      - key: VIGIL_ACP_PRIVATE_KEY
+        sync: false
+      - key: VIGIL_ACP_WALLET_ADDRESS
+        value: "0x07066313090a8a45edd830f431fa500eb2f2cb45"
+      - key: VIGIL_ACP_ENTITY_ID
+        value: "01a0350e-07ea-7f36-ad55-89a7c8d97bef"
+      - key: VIGIL_ACP_AGENT_URL
+        value: "https://app.virtuals.io/acp/agents/01a0350e-07ea-7f36-ad55-89a7c8d97bef"
 
-      # ── Audit log ────────────────────────────────────────────────────────────
-      - key: VIGIL_AUDIT_PATH
-        value: "./vigil-audit.jsonl"
+      # ── OTEL (optional) ──────────────────────────────────────────────────────
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        sync: false
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        sync: false
+
+  # ── 2. Sibyl Memory service (Python/FastAPI + SQLite on persistent disk) ──────
+  - type: web
+    name: vigil-sibyl-memory
+    env: docker
+    dockerfilePath: ./services/sibyl-memory/Dockerfile
+    region: oregon
+    plan: free
+    healthCheckPath: /health
+    disk:
+      name: vigil-memory-disk
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: SIBYL_DB_PATH
+        value: "/data/memory.db"
+      - key: SIBYL_HOST
+        value: "0.0.0.0"
+      - key: SIBYL_PORT
+        value: "8787"
+      - key: SIBYL_TENANT_ID
+        value: "00000000-0000-0000-0000-000000000001"
+

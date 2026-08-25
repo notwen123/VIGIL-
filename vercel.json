@@ -1,5 +1,6 @@
 {
   "framework": "nextjs",
+  "rootDirectory": "frontend",
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "outputDirectory": ".next",
@@ -9,4 +10,3 @@
     "NEXT_PUBLIC_VIGIL_WS_URL": "wss://vigil-hydra.onrender.com/api/v1/vigil/ws"
   }
 }
-

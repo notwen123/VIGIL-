@@ -1,449 +1,224 @@
 Skip to content
-HackHydra
-About
-Repo
-Timeline
-Tracks
-Prizes
-Submit
+
+SIBYL
+Hackathon
+Home
+Scoring
+Submissions
 Rules
-FAQ
-GitHub
-HydraDB
-Presents
+Leaderboard
+Docs ↗
+Register your team
 
-Hack Hydra
-Open Source · Online · $10K in Prizes
+Sibyl Labs Hackathon · Build Sep 1 to 10, 2026
+Forgetting
+is a bug.
+Build on Sibyl Memory, the dynamic data layer that remembers. Compete for $10,000 and two entries into Base Support Programs on one leaderboard.
 
-Build with the HydraDB OSS repo
+#2 on LongMemEval · 95.6% ↗
+Register your team →
+How submissions work
+Registration opens Aug 16 · closes Aug 31, 23:59 UTC
 
-Dates
 
-Aug 12-20, 2026
+$10,000
+prize pool
+x1.25
+multiplier cap
+2
+partner stacks
+Sep 10
+submission deadline
+Supported by
 
-Teams of 1-4 · Online · Open source
+Sibyl Labs
+Base
 
-Scroll
-Open Source
-Online
-$10K in Prizes
-Aug 12-20, 2026
-Build with the HydraDB OSS repo
-Teams of 1-4
-Open Source
-Online
-$10K in Prizes
-Aug 12-20, 2026
-Build with the HydraDB OSS repo
-Teams of 1-4
-01 / About
-A nine-day, open-source
-hackathon by HydraDB.
-HydraDB is a graph database built for AI applications, using object storage to stay fast and cost-efficient. From August 12–20, we're open-sourcing HydraDB and inviting developers globally to build across three technical tracks: enterprise knowledge, coding agents, and agent memory, while competing for up to $10,000 in prizes.
+Virtuals Protocol
+Partners
 
-Days to build
-9
-Days to build
-In prizes
-$10K
-In prizes
-Team size
-1-4
-Team size
-Online
-100%
-Online
-02 / Repo
-The HydraDB OSS repo is live.
-HydraDB is open source. Clone it, read the README, and build your hackathon project on top of it. Questions about the codebase get answered fastest in Discord, where the HydraDB team runs walkthroughs and office hours all nine days.
+One challenge. Two partner stacks.
+Build with persistent Sibyl memory, then use Base and Virtuals where they make your agent stronger. Every verified partner stack increases your Builder Score.
 
-Source
-github.com/hydra-db/hydradb
+Want to partner? Get in touch ↗
 
-HydraDB has to do real work in your project, not just sit in the README. Every track is built around it.
+Base
+↗
+Onchain infrastructure for agent actions and transactions
+Brings
+Base rails, agentic payments, and builder support
 
-03 / Timeline
-One clean open source repo.
-The hackathon kicks off on August 12 and submissions close on August 20 at 11:59 PM PT. Any schedule or submission updates will be announced in Discord.
+Verified stack
 
-Day 01
-Aug 12
-Kickoff
-The HydraDB open-source repo goes live and the build period officially begins. Projects must start on or after August 12.
+Virtuals Protocol
+↗
+Runtime and coordination for autonomous agents
+Brings
+Agent-native infrastructure, coordination, and distribution
 
-Day 01-09
-Aug 12-20
-Build
-Nine days to ship. The HydraDB team will be active in Discord throughout the hackathon for questions, repo walkthroughs, technical support and office hours.
+Verified stack
+One challenge. One leaderboard.
+Build an agent whose persistent memory changes what it knows, decides, or does across sessions.
 
-Day 09
-Aug 20
-Submission
-Submissions close at 11:59 PM PT. Submit your repository, demo video and completed submission form before the deadline.
+Eligibility gate
 
-Wrap-up
-Aug 24
+Memory must be load-bearing.
+Your agent must recall and use persisted context in a fresh session. Thin wrappers, decorative integrations, and package imports without real execution are not eligible.
+
+✓
+Load-bearing. In a fresh session, the agent recalls a customer's past dispute and changes the offer it makes because of it.
+
+✕
+Wrapper. The agent writes every message to a memory API but never reads it back to change what it does.
+
+What judges need to see
+
+01
+Persist context that matters to the agent.
+
+02
+Recall it in a genuinely fresh session.
+
+03
+Use it to change a decision, action, or result.
+
+#2
+LongMemEval ↗
+95.6%
+native architecture ↗
+350/350
+retrieval ↗
+500
+company benchmark ↗
+#2 and 95.6% are Sibyl's published LongMemEval results. The 350/350 retrieval and 500-company figures are an independent third-party benchmark run at agent-bench.xyz.
+
+One score · one leaderboard
+
+Builder Score = Judge Score × Stack Multiplier
+Two stages. First a pass/fail gate: Sibyl Memory must be load-bearing. Then judges score a 100-point rubric, a genuine product-market-fit (PMF) bonus adds up to 10, and verified partner stacks lift the total, up to x1.25.
+
+100-pt rubric + 10 PMF bonus = 110 max, before multiplier
+
+Memory is load-bearing 40
+Innovation & originality 25
+Technical execution 20
+Pitch & presentation 15
+PMF bonus +10
+View the full rules
++
+Verified partner stacks	Multiplier
+0	x1.00
+1	x1.15
+2	x1.25 (cap)
+A stack counts only when judges confirm it is doing real work in the submitted build. Decorative integrations and unused package imports do not count.
+
+Worked example: a build scores 82/110 (rubric + PMF bonus), the team ships two verified partner stacks, so x1.25. Builder Score: 102.5. Sibyl Memory is mandatory and never counts as a bonus stack.
+
+Select the partner stacks your build would use
+
+BasePartner stack
+Onchain infrastructure for agent actions and transactions
+
+Virtuals ProtocolPartner stack
+Runtime and coordination for autonomous agents
+Sibyl Memory is required and does not count as a bonus stack.
+
+0 verified stacks → x1.00
+
+82Builder Score on the 82-point example
+
+Prizes
+
+Winners get backed.
+$10,000 in USDC across the top five. First place also earns a Network School residency, and second place earns one entry into a Base Support Program. Real backing on top of the cash.
+
+Register your team
+→
+sibyl · oracle terminal
+sibyl@hackathon:~$ cat prizes.txt
+
+$10,000
+total prize pool
+01	$4,000	USDC on Base + Network School residency
+02	$2,500	USDC on Base + one entry into a Base Support Program
+03	$1,500	USDC on Base
+04	$1,000	USDC on Base
+05	$1,000	USDC on Base
+sibyl@hackathon:~$
+
+How it runs
+Aug 16 to 31
+Registration
+Register your team before the build window opens.
+
+Sep 1 to 10
+Build window
+Ten days to build and submit an agent with persistent memory.
+
+Sep 5 to 7
+Partner workshops
+Live sessions with Base and Virtuals Protocol.
+
+Sep 11 to 12
+Judging
+Projects are reviewed and scored on one leaderboard.
+
+Sep 13 to 15
 Winners
-The HydraDB team and judging panel review all eligible submissions. The Grand Champion, Overall Runner-Up, Third Place and Best Use of HydraDB awards are announced after judging is complete.
+The top five are announced, with winner spotlights on X.
 
-Note / Your work on the project has to start on or after August 12, 2026. See the rules below.
+Questions
 
-04 / Tracks
-Three problems.
-Pick one.
-Each track is a real problem HydraDB and its customers care about, and each one is a graph problem rather than something a vector database can handle. The top submission from every track advances to the final round, and you are welcome to enter more than one with a distinct project.
+Before you register
+Can I compete solo?
++
+Yes. Teams are 1 to 5 people. Register on your own or bring a crew.
 
-Track 01
-Enterprise context and ontology
-Build an ontology out of real enterprise applications.
+What does it cost?
++
+Nothing. Entry is free, and prizes pay in USDC on Base.
 
-You get roughly half a million documents drawn from nine different sources: Slack, Gmail, Linear, Google Drive, HubSpot, Fireflies, GitHub, Jira and Confluence. They arrive with all the noise an actual company has, including misfiled documents, near duplicates and statements that flatly contradict each other.
+Do I have to build on Base or Virtuals?
++
+No. Sibyl Memory is the only required stack. Base and Virtuals are optional and add a scoring multiplier when a judge can see them doing real work in your demo.
 
-Your job is to turn that into a clean, queryable ontology in HydraDB and then answer questions ranging from simple lookups to multi-hop reasoning, conflict resolution, and correctly recognizing when the answer just is not in there.
+Do I need crypto or web3 experience?
++
+No. If you can build an agent, you can enter. Sibyl Memory is a file-based layer you call like any library, and Base and Virtuals are optional. Prizes pay in USDC on Base, and if you have never held crypto we help winners set up a wallet at payout.
 
-Extraction is the easy part now that LLMs are cheap. The hard part is entity resolution and ontology alignment: deciding that “Sam”, “@soham” and “S. Ratnaparkhi” are one person, and figuring out which of two contradictory statements to trust.
+What is Sibyl Memory, and where do I learn it?
++
+A file-based memory layer for agents: persistent recall across sessions, no vector database. Explore it before you register ↗
 
-Datasets
-Enterprise RAG Bench
-Salesforce HERB
-Track 02
-Repos, dependencies and code as graphs
-Search the graph, and catch chained vulnerabilities before they land.
+What counts as memory being load-bearing?
++
+Delete the memory layer. If your project still does what it claims, it is a wrapper and does not qualify. If the core function breaks, memory is load-bearing.
 
-Supply chain attacks through npm and PyPI are surging, and developer tools today fail to give real time, deep context on malicious dependencies.
-
-When a package gets compromised, answer questions like
-Which internal services are transitively exposed?
-Which version of the dependency introduced the vulnerability?
-Which applications resolved the compromised version while it was live?
-Which other packages share maintainers or infrastructure with it?
-Are there likely typosquat packages nearby?
-What is the complete blast radius?
-The central insight is that this is fundamentally a graph traversal and dependency problem, not a semantic similarity problem.
-
-Pick A or B
-A
-Supply chain blast radius
-Software supply chain attacks stopped being a nuisance and became an automated, worm driven problem. In the TanStack compromise this May, 84 malicious package artifacts were published across 42 packages within six minutes of the CI pipeline being breached. The worm went on to hit Mistral AI, UiPath and over 160 other npm and PyPI packages, self propagating and persisting in .claude/ and .vscode/ directories in a way that survived npm uninstall.
-
-The defender's problem is speed. When a package is compromised at 09:00, which of your services are exposed by 09:06? That is a transitive reverse dependency closure over an ecosystem graph with tens of millions of versioned nodes, and it is the kind of question a vector index cannot answer at all.
-
-Build the npm or PyPI dependency graph in HydraDB and answer it. Then go further: which packages share a maintainer with the compromised one, which lockfiles resolved to the bad version during the window it was live, and which names sit close enough to a popular package to be a typosquat.
-
-B
-Code graphs for IDE assistants
-Every IDE assistant embeds repositories and retrieves chunks by similarity. Similarity is a weak proxy for relevance. Code needs call chains, type definitions, startup configs and tests.
-
-Build a code graph in HydraDB and serve better context with it. This is the missing piece for editor wrappers today.
-
-Track 03
-Memory and context retrieval
-Make your own mem0, and ace the benchmarks.
-
-Build an agent memory layer for cross session continuity. It has to process chat histories spanning 30 to 40 sessions and 115,000 tokens per question.
-
-The system has to synthesize facts across sessions, keep chronological order and track information that was later overwritten. Long context models drop 30 to 60% in accuracy here, and they mostly fail at abstention: knowing when the answer simply is not in the history and saying so instead of inventing one.
-
-Datasets
-LongMemEval
-LongMemEval V2
-BEAM
-Whichever track you take, the build starts on August 12. Nothing you write before then can go into your submission.
-
-05 / Prizes
-$10,000 in prizes.
-Four awards. One incredible opportunity.
-
-$5,000
-
-Grand Champion
-Awarded to the best overall submission across all three tracks.
-
-$3,000
-
-Overall Runner-Up
-Awarded to the second best overall submission across all three tracks.
-
-$1,500
-
-Third Place
-Awarded to the third best overall submission across all three tracks.
-
-$500
-
-Best Use of HydraDB
-Awarded to the submission that demonstrates the most thoughtful and technically interesting use of HydraDB.
-
-The top submission from each track advances to the final round. Final placement is determined across all three tracks.
-
-How judging works
-Judged in your track first, then across all three.
-01
-Within your track
-Projects are first evaluated against the other submissions in the track they were entered in. The top submission from each track advances.
-
-02
-Final round
-Judges compare the three finalists holistically and rank them for the Grand Champion, Overall Runner-Up and Third Place awards.
-
-A strong submission has
-A functional product or demo
-Real ingestion and retrieval workflows
-A clear use case
-A thoughtful technical implementation
-Judges consider
-01
-Technical execution
-02
-Use of HydraDB and graph-native approaches
-03
-Product completeness and usability
-04
-Quality of results
-05
-Originality
-We care about working, thoughtful products, not just benchmark scores.
-
-Special award
-$500
-Best Use of HydraDB
-What we're looking for
-
-A particularly strong graph data model
-A novel retrieval or reasoning approach
-An interesting use of relationships, traversal or context
-A use case that is hard to pull off with traditional vector or relational approaches
-This one is judged separately and can go to any eligible submission, including a finalist.
-
-Multiple track submissions
-You can enter more than one track.
-Teams are welcome to submit to more than one track.
-Each submission has to be a meaningfully distinct project that addresses that track's problem statement. The same project cannot be entered in several tracks with only minor modifications.
-A team can be a finalist in more than one track but can only take home one of the top three awards.
-Every team stays eligible for the $500 Best Use of HydraDB award, whichever track they enter.
-To be eligible you need a complete submission by the deadline: repo, demo video and form. HydraDB reserves the right not to award a prize if the submissions do not meet the minimum quality bar.
-
-06 / Submission
-Submission requirements.
-A complete submission requires three things: a submission form, a demo video of 3 minutes or less, and a public GitHub repository. All three must be submitted by the deadline.
-
-Submission deadline
-August 20, 2026 · 11:59 PM PT
-
-The form closes then. Late submissions are not accepted unless we announce an extension.
-
-01
-Submission form
-Submit your project through the official Hack Hydra submission form before the deadline.
-
-The form will ask for
-
-Project name
-Short project description
-Problem being addressed
-What you built
-Deployed project link, if available
-How the project uses the HydraDB Open Source Repo
-Tech stack used
-Team members and individual contributions
-GitHub repository link
-3-minute demo video link
-02
-3-minute pitch & demo video
-Each team submits a video of 3 minutes or less introducing and demonstrating the project.
-
-The video should cover
-
-The problem you are trying to solve
-What you actually built
-A demo of the project working
-How you used the HydraDB repo and why it matters
-YouTube works fine. Unlisted links are fine too, as long as judges can watch without asking for access.
-
-Anything past the 3-minute mark may not be reviewed.
-
-03
-Public GitHub repository
-Every submission needs a link to the project's public GitHub repository.
-
-The repository must contain
-
-Complete source code for the submitted project
-No participant-authored commits before August 12, 2026
-A clear README
-Setup and run instructions
-An explanation of how HydraDB is used
-Required environment or dependency information
-Attribution for third-party libraries, APIs, datasets or open-source code used
-An open-source license
-Judges need to be able to open the repo and understand what you built.
-
-07 / Rules
-Build it during
-the hackathon.
-Start on August 12, build something original, use HydraDB properly and keep everything open to inspection.
-
-01
-Build it during the nine days
-Work on your project starts on or after August 12, 2026. Start a fresh repo, because judges can read commit history.
-Existing open source libraries, frameworks, APIs, public datasets and AI coding assistants are all fair game.
-The project has to be your team's own work. Credit anything you borrowed in the README.
-02
-Use HydraDB properly
-HydraDB has to do real work in your project, not just sit in the README.
-Be ready to say where it is used and what the project would lose without it.
-All three tracks are built around HydraDB, so picking one is the easiest way to get this right.
-03
-Teams of 1 to 4
-Every member has to be listed on the submission form.
-You can only be on one team, or build solo.
-A team can enter more than one track, as long as each entry is a meaningfully distinct project. One team can still only take home one of the top three awards.
-04
-Submit by August 20
-Everything goes through the official submission form by 11:59 PM PT on August 20, 2026.
-The form closes on time. Late entries are not accepted unless we announce an extension.
-Open your repo, video and demo links yourself before you submit. Broken links are the most common way people lose.
-Disqualification
-A submission may be disqualified for:
-
-Work started before August 12, 2026
-Missing or private GitHub repository
-No open-source license in the repository
-Missing demo video
-HydraDB not used meaningfully
-Submitted after the deadline
-Breaking the rules or the code of conduct
-Organizers can review repository history and ask for clarification if something looks off.
-
-Judging is in two rounds: within your track first, then across the three finalists. The criteria are published with the prize structure.
-
-08 / FAQ
-FAQ
-If something is not covered here, ask in Discord. The HydraDB team will gladly answer your questions.
-
-
-01
-What is Hack Hydra?
-Hack Hydra is a nine-day online hackathon by HydraDB running from August 12-20, 2026. Build a project using the HydraDB open-source repo, submit a public GitHub repository and a demo video, and compete for $10,000 in prizes.
-
-
-02
-Why are we doing this hackathon?
-
-03
-Who can participate?
-
-04
-How much does it cost?
-
-05
-Is it in person or online?
-
-06
-How do I register?
-
-07
-Do I need a team?
-
-08
-Do I have to use HydraDB?
-
-09
-Do I have to pick one of the three tracks?
-
-10
-Can I submit to more than one track?
-
-11
-Can the same team win multiple tracks?
-
-12
-Can I switch tracks during the hackathon?
-
-13
-Do I have to use the suggested datasets?
-
-14
-Can I start building before August 12?
-
-15
-Can I use existing libraries, frameworks, APIs, or AI coding assistants?
-
-16
-Can I build on an existing project or codebase?
-
-17
-Does the commit history of a fork or dependency count against me?
-
-18
-Does my repository have to be public?
-
-19
-What needs to be in the repository?
-
-20
-What open-source license should I use?
-
-21
-What are the demo video requirements?
-
-22
-What do I need to submit?
-
-23
-When is the deadline?
-
-24
-How will projects be judged?
-
-25
-What are the prizes?
-
-26
-Can a prize go unawarded?
-
-27
 Who owns what I build?
++
+You keep all your IP. By submitting you grant Sibyl Labs and the partners a non-exclusive license to feature your work in event coverage, always with attribution.
 
-28
-Can HydraDB employees participate?
+Who can enter?
++
+Anyone 18 or older, outside sanctioned jurisdictions. Sibyl Labs staff and reference builds are showcase-only and cannot win prizes.
 
-29
-When will winners be announced?
+How do I get help or find teammates?
++
+Join the Sibyl Labs Discord: find a team, ask questions, and follow build updates through the window.
 
-30
-I still have a question. What do I do?
-Still stuck?
-Ask in the Hack Hydra Discord.
-Finding teammates, repo questions, office hours and every announcement happen there first.
+What do I submit?
++
+A public repo (MIT or Apache-2.0), a 2 to 5 minute demo with a fresh-session recall moment, a README, and two build-in-public posts. See the full checklist →
 
-Registration is open
-Nine days.
-Start building.
-August 12-20, 2026 · Online · $10,000 in prizes. Build solo or in a team of up to four.
+Ready to build?
+Registration opens Aug 16. Grab your team and claim your spot on the leaderboard.
 
-HACK
-HYDRA
+Register your team →
 
-Aug 12-20, 2026 · Online · Open source
-
-Presented by
-
-HydraDB
-Explore
-
-About
-Repo
-Timeline
-Tracks
-Prizes
-Submit
-Rules
-FAQ
-GitHub
-Get involved
-
-Discord community
-Submission form
-© 2026 HydraDB. All rights reserved.
-
+SIBYL
+© 2026 Sibyl Labs LLC
+Register
+Submissions
+Leaderboard
+Discord ↗
+sibyllabs.org ↗

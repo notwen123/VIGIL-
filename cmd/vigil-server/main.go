@@ -87,7 +87,11 @@ func main() {
 	}
 
 	addr := ":8080"
-	if v := vigil.Env("ADDR"); v != "" {
+	// Render injects PORT and routes all external traffic to it.
+	// Prefer PORT → VIGIL_ADDR → :8080 (local default).
+	if port := os.Getenv("PORT"); port != "" {
+		addr = ":" + port
+	} else if v := vigil.Env("ADDR"); v != "" {
 		addr = v
 	}
 

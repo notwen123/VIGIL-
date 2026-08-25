@@ -360,8 +360,14 @@ def _ms(started: float) -> float:
 if __name__ == "__main__":
     import uvicorn
 
+    # Render injects PORT and routes external traffic to it.
+    # Fall back to SIBYL_PORT (Docker dev) and then 8787.
+    port = int(
+        os.environ.get("PORT")
+        or os.environ.get("SIBYL_PORT", "8787")
+    )
     uvicorn.run(
         app,
-        host=os.environ.get("SIBYL_HOST", "127.0.0.1"),
-        port=int(os.environ.get("SIBYL_PORT", "8787")),
+        host=os.environ.get("SIBYL_HOST", "0.0.0.0"),
+        port=port,
     )
