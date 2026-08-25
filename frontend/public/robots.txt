@@ -1,0 +1,8 @@
+# VIGIL MEMORY — https://vigil-sibyl-memory.vercel.app
+# Crawlers and AI agents are welcome. See /llms.txt for a plain-markdown
+# summary written to be read by a language model rather than rendered.
+
+User-agent: *
+Allow: /
+
+Sitemap: https://vigil-sibyl-memory.vercel.app/sitemap.xml

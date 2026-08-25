@@ -1,36 +1,105 @@
-## VIGIL MEMORY — See [MEMORY.md](./MEMORY.md) for the load-bearing memory map with exact file:line
+# VIGIL MEMORY
 
-VIGIL now remembers agents across sessions, devices and restarts. The deletion
-test, the five-tier map, and every `file:line` a judge needs are in
-**[MEMORY.md](./MEMORY.md)** — start there.
+**A runtime firewall for autonomous AI agents that remembers which agents are
+banned across sessions, devices and process restarts.**
 
-## Join Waitlist
+An agent caught installing the typosquat `reqeusts` is blocked. Kill every
+process, start fresh, and it is *still* blocked — because trust is a database
+row, not history replayed into a context window. Recall is a keyed lookup:
+**~1 ms in-process, ~1-2.6 ms over the local HTTP service, ~260 ms on the
+hosted split deployment**. No vectors, no embeddings, and no LLM call anywhere
+on the enforcement path.
 
-VIGIL MEMORY blocks banned agents across restarts — **~1ms** when memory runs
-in-process, **~260ms** on the hosted split-service deployment, where every
-recall is a cross-host HTTP hop. Both numbers are measured; neither is an
-estimate. See [MEMORY.md](./MEMORY.md) §5.
+Delete the memory layer and the identical call is **ALLOWED**. That is not a
+claim, it is a test that runs in 30 seconds — see [Verify in 3 minutes](#verify-in-3-minutes).
 
-- **Waitlist:** https://tally.so/r/XxPJAe
-- **ACP service:** `vigil_memory_block_banned_agents_in_1ms`
-- **Entity:** `01a0350e-07ea-7f36-ad55-89a7c8d97bef`
-- **Wallet:** `0x07066313090a8a45edd830f431fa500eb2f2cb45`
+---
 
-Job evaluation is live and memory-backed — POST an ACP job and it is decided
-from cross-session trust, no LLM, at the latencies above. On-chain provider
-registration is **not** complete: the agent's ERC-4337 smart account has no
-code deployed on Base mainnet or Sepolia yet, so `/api/v1/vigil/acp/status`
-reports `identity_configured: true, registered: false`. It flips on its own
-once that account is deployed.
+## For judges — everything, with line numbers
+
+| Gate requirement | Where | Status |
+|---|---|---|
+| **Memory is on the critical path** | [`firewall.go:300`](pkg/query-service/vigil/firewall/firewall.go#L300) — before graph (352), cost (406), behaviour (456), model (509) | ✅ guarded by a test that fails the build if it regresses |
+| **Cold-start recall in a fresh session** | `./demo/memory_demo.sh` — kills every process, recalls trust=10 in ~1.3 ms | ✅ |
+| **Deletion test breaks the core function** | Comment [`firewall.go:295-350`](pkg/query-service/vigil/firewall/firewall.go#L295) + `:830`. Builds clean, session 2 flips **BLOCK → ALLOW** | ✅ executed, not described |
+| **Memory read/write map, findable in 2 min** | [MEMORY.md §1](./MEMORY.md#1-where-memory-is-load-bearing--exact-fileline) — 5 read hops, 6 write hops, every one a `file:line` | ✅ |
+
+| Rubric criterion | Evidence |
+|---|---|
+| **Memory load-bearing (40)** | Five live tiers in one database — HOT 1 / WARM 2 / COLD 35 / REFERENCE 3 / ARCHIVE 3. Progressive enforcement ladder 50 → PAUSE 30 → BLOCK 10 → archived, surviving restarts. [Deep audit](./DEEP_INTEGRATION_REPORT.md) |
+| **Innovation (25)** | Trust-as-memory: the firewall's *second* stage, ahead of the graph and the model, so a repeat offender costs one local read instead of a graph query plus an LLM judgement |
+| **Technical execution (20)** | 12 Go packages green offline with zero API keys, 60+ real commits, live deployment, three adversarial audits that downgraded their own earlier passes |
+| **Pitch (15)** | `demo/demo.mp4` |
+| **PMF (+10)** | [Waitlist](https://tally.so/r/XxPJAe). Design-partner slots deliberately left blank — see [MEMORY.md §8](./MEMORY.md) |
+
+### Partner stacks — real work, verifiable on chain
+
+| Stack | Artifact | Verify |
+|---|---|---|
+| **Base** — audit anchoring | `VigilAnchor` at [`0x03164E72ffEd3293350A9b66e40aF00E59645020`](https://sepolia.basescan.org/address/0x03164E72ffEd3293350A9b66e40aF00E59645020) on Base Sepolia | [First anchor tx](https://sepolia.basescan.org/tx/0x8fb2c862953d342ede8b2ab42e2701ff73e435859993769d480d160c8ee7d3a1) — status 1, block 45910360. `anchorCount` 6 |
+| **Virtuals ACP** | Job evaluation live and memory-backed, [`pkg/acp/service.go:157`](pkg/acp/service.go#L157) | `curl -X POST https://vigil-cuy2.onrender.com/api/v1/vigil/acp/job` |
+
+The anchored hash is the **real head of this repo's audit ledger** (355 events
+at the time), and `verifyHead()` returns `true` for it and `false` for a
+tampered claim. Sepolia, not mainnet — testnet transactions carry no economic
+weight, and this repository says so everywhere rather than implying otherwise.
+
+### Verify in 3 minutes
+
+```bash
+git clone https://github.com/notwen123/VIGIL-.git && cd VIGIL-
+
+go test ./pkg/query-service/vigil/... ./pkg/acp/...   # 12 packages, offline, no keys
+./demo/memory_demo.sh                                 # the gate: kill, restart, still blocked
+```
+
+The demo parses its own output and **exits non-zero** if session 2 fails to
+block or the memory-less run fails to allow. It cannot pass by narrating.
+
+### Live
+
+| | |
+|---|---|
+| Dashboard | https://vigil-sibyl-memory.vercel.app/ |
+| API | https://vigil-cuy2.onrender.com |
+| Memory service | https://vigil-sibyl-memory.onrender.com/docs |
+| Source | https://github.com/notwen123/VIGIL- |
+| Waitlist | https://tally.so/r/XxPJAe |
+
+```bash
+# a banned agent, refused from memory, no LLM
+curl -sX POST https://vigil-cuy2.onrender.com/api/v1/vigil/acp/job \
+  -H 'Content-Type: application/json' \
+  -d '{"job_id":"1","buyer_agent_id":"trading-agent-alpha","requested_tool":"run_command"}'
+```
+
+### What is *not* done — stated, not hidden
+
+- **Base mainnet.** Signer holds 0 ETH there. Sepolia only.
+- **Virtuals on-chain registration.** The agent's ERC-4337 smart account has no
+  code deployed on either chain, so `/api/v1/vigil/acp/status` reports
+  `identity_configured: true, registered: false`. It is verified by asking the
+  chain, not by reading an environment variable, and flips on its own once
+  that account is deployed.
+- **Design partners.** Zero. Naming any would be fabricated evidence.
+- **ARCHIVE tier** was unreachable until it was found and fixed mid-audit; the
+  fix exposed a worse bug where archiving *un-banned* the agent. Both are
+  fixed, tested, and written up rather than quietly patched.
+
+Three independent audits are in the repository, including the ones that
+**failed**: [DEEP_INTEGRATION_REPORT.md](./DEEP_INTEGRATION_REPORT.md),
+[FINAL_AUDIT_DONE.md](./FINAL_AUDIT_DONE.md), [AUDIT_REPORT.md](./AUDIT_REPORT.md).
 
 ---
 
 **Licensing:** original VIGIL MEMORY code (`pkg/query-service/vigil/`,
 `pkg/acp/`, `services/`) is MIT — see [LICENSE.MIT](./LICENSE.MIT). The
 inherited SigNoz fork remains Apache-2.0 — see [LICENSE](./LICENSE). The root
-licence is not changed, because that code is not ours to relicense.
+licence is not changed, because that code is not ours to relicense. Both are
+OSI-approved.
 
 ---
+
 
 # VIGIL
 
@@ -43,18 +112,18 @@ licence is not changed, because that code is not ours to relicense.
 </p>
 
 <p align="center">
-  <a href="https://vigil-featherless.vercel.app/">Live Dashboard</a> ·
-  <a href="https://vigil-server.onrender.com/">API</a> ·
-  <a href="https://github.com/LSUDOKO/Vigil">Source</a>
+  <a href="https://vigil-sibyl-memory.vercel.app/">Live Dashboard</a> ·
+  <a href="https://vigil-cuy2.onrender.com/">API</a> ·
+  <a href="https://github.com/notwen123/VIGIL-">Source</a>
 </p>
 
 <p align="center">
 
-![Go](https://img.shields.io/badge/Go-1.24%2B-00ADD8?style=flat-square\&logo=go\&logoColor=white)
+![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?style=flat-square\&logo=go\&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-Compatible-111827?style=flat-square)
 ![Featherless](https://img.shields.io/badge/AI-Featherless-7C3AED?style=flat-square)
 ![OpenTelemetry](https://img.shields.io/badge/Observability-OpenTelemetry-425CC7?style=flat-square)
-![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+![License](https://img.shields.io/badge/License-Apache--2.0%20%2B%20MIT-green?style=flat-square)
 
 </p>
 
@@ -1255,7 +1324,7 @@ The governance layer should not depend on a single model provider.
 ## Clone
 
 ```bash
-git clone https://github.com/LSUDOKO/Vigil.git
+git clone https://github.com/notwen123/VIGIL-.git
 cd Vigil
 ```
 
@@ -1456,13 +1525,13 @@ Features should be evaluated according to their current implementation and verif
 # Live
 
 **Dashboard:**
-https://vigil-featherless.vercel.app/
+https://vigil-sibyl-memory.vercel.app/
 
 **API:**
-https://vigil-server.onrender.com/
+https://vigil-cuy2.onrender.com/
 
 **Source:**
-https://github.com/LSUDOKO/Vigil
+https://github.com/notwen123/VIGIL-
 
 ---
 

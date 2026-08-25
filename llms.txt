@@ -1,0 +1,76 @@
+# VIGIL MEMORY
+
+> A runtime firewall for autonomous AI agents that remembers which agents are
+> banned across sessions, devices and process restarts.
+
+An AI agent caught attempting to install the typosquatted package `reqeusts`
+is blocked. Kill every process, start a fresh session, and the same agent is
+still blocked — because its trust score is a database row rather than history
+replayed into a context window.
+
+Recall is a keyed lookup, not a search: **~1ms in-process, ~1-2.6ms over the
+local HTTP memory service, ~260ms on the hosted split deployment** where the
+memory service runs on a separate host. There are no vectors, no embeddings,
+and no LLM call anywhere on the enforcement path.
+
+Memory is the second stage of a six-stage decision pipeline, ahead of the
+dependency graph and ahead of any model. A repeat offender is therefore
+stopped by one local database read instead of a graph query plus a paid LLM
+judgement. Removing the memory layer is a runnable test: the code still
+compiles, and the identical blocked call becomes ALLOWED.
+
+## Key facts
+
+- Five memory tiers: HOT session state, WARM agent trust, COLD decision
+  journal, REFERENCE runbooks, ARCHIVE retired agents. All five carry live
+  data in a single deployment.
+- Progressive enforcement ladder: trust 50 → PAUSE at 30 → BLOCK at 10 →
+  archived. The ladder survives process restarts; an archived agent stays
+  banned because recall falls back to the archive tier.
+- Every firewall decision is SHA-256 hash-chained locally and anchored to Base
+  Sepolia. The anchored hash equals the local ledger head byte for byte, and
+  the contract rejects a tampered claim.
+- Backend is SQLite + FTS5 on local disk, PostgreSQL on the hosted
+  deployment. The tier schema, enforcement path and archive fallback are
+  identical either way.
+- Built on a SigNoz fork. Original VIGIL MEMORY code is MIT; the inherited
+  fork remains Apache-2.0.
+
+## Common questions
+
+**Does memory survive a restart?** Yes. `demo/memory_demo.sh` kills every
+process between sessions and the agent is still blocked, recalled in about a
+millisecond, with the denylist deliberately unset so memory is the only thing
+that can block.
+
+**What happens if you delete the memory layer?** The build stays green and the
+identical call is ALLOWED. That is the point of the deletion test.
+
+**Does it use a vector database?** No. Recall is a primary-key read plus an
+FTS5 index. Zero embeddings are computed anywhere.
+
+**Is an LLM involved in blocking an agent?** No. Every block reports
+`model=none`. Models are a last resort for genuinely uncertain calls only.
+
+## Docs
+
+- [Memory map with exact file:line](https://github.com/notwen123/VIGIL-/blob/main/MEMORY.md)
+- [Deep integration audit](https://github.com/notwen123/VIGIL-/blob/main/DEEP_INTEGRATION_REPORT.md)
+- [Final audit](https://github.com/notwen123/VIGIL-/blob/main/FINAL_AUDIT_DONE.md)
+- [Source](https://github.com/notwen123/VIGIL-)
+
+## Live
+
+- Dashboard: https://vigil-sibyl-memory.vercel.app
+- API: https://vigil-cuy2.onrender.com
+- Memory service API docs: https://vigil-sibyl-memory.onrender.com/docs
+- Waitlist: https://tally.so/r/XxPJAe
+
+## Limits, stated plainly
+
+- On-chain anchoring is on Base **Sepolia**, not mainnet. Testnet
+  transactions carry no economic weight.
+- Virtuals ACP job evaluation is live and memory-backed, but on-chain provider
+  registration is not complete: the agent's ERC-4337 smart account has no code
+  deployed yet, so the status endpoint reports `registered: false`.
+- There are no design partners. None are claimed.
