@@ -6,9 +6,20 @@ Kill the terminal and VIGIL used to forget everything. The agent would try
 `pip install reqeusts` again, and you would pay an LLM to work out — again —
 that it is a typosquat of `requests`. This is the layer that stops that.
 
-Trust lives in a SQLite file, not in a context window. Recall is a keyed
+Trust lives in a database row, not in a context window — SQLite when
+`services/sibyl-memory` runs on local disk, PostgreSQL on the hosted
+deployment. The tier schema, the enforcement path and the archive fallback
+are identical either way; what changes is where the bytes sit. Recall is a keyed
 lookup, not history replayed into a prompt: **measured p95 = 0.007 ms** over
 2,500 rows on a cold client (`services/sibyl-memory/bench_scale.py`).
+
+That figure is the raw in-process read. Two other numbers matter and are
+stated rather than buried: **~1-2.6 ms** through the local HTTP memory
+service, which is what the firewall actually pays, and **~260 ms** on the
+hosted deployment at `vigil-cuy2.onrender.com`, where memory is a separate
+Render service and every recall crosses the network. Same code, three
+deployment shapes, three honest numbers. Quoting only the first would be
+true of a benchmark and false of the thing you can curl.
 
 One honest limit, found by running the benchmark rather than assuming: the
 `sibyl-memory-client` free tier is **capped at 2 MB**, so the "500 sessions x
@@ -389,7 +400,8 @@ mistake it was already corrected for.
 
 - [x] **Waitlist: https://tally.so/r/XxPJAe**
       VIGIL MEMORY — 5-tier SQLite firewall that checks if an agent is banned
-      across restarts and blocks in 1ms. Base-anchored on Sepolia, no LLM.
+      across restarts and blocks in ~1ms in-process. Base-anchored on
+      Sepolia, no LLM.
 - [ ] Partner 1 — `TODO: real GitHub org / contact`
 - [ ] Partner 2 — `TODO: real GitHub org / contact`
 - [ ] Partner 3 — `TODO: real GitHub org / contact`

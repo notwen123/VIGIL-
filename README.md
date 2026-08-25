@@ -6,7 +6,10 @@ test, the five-tier map, and every `file:line` a judge needs are in
 
 ## Join Waitlist
 
-VIGIL MEMORY blocks banned agents in <2ms across restarts.
+VIGIL MEMORY blocks banned agents across restarts — **~1ms** when memory runs
+in-process, **~260ms** on the hosted split-service deployment, where every
+recall is a cross-host HTTP hop. Both numbers are measured; neither is an
+estimate. See [MEMORY.md](./MEMORY.md) §5.
 
 - **Waitlist:** https://tally.so/r/XxPJAe
 - **ACP service:** `vigil_memory_block_banned_agents_in_1ms`
@@ -14,7 +17,7 @@ VIGIL MEMORY blocks banned agents in <2ms across restarts.
 - **Wallet:** `0x07066313090a8a45edd830f431fa500eb2f2cb45`
 
 Job evaluation is live and memory-backed — POST an ACP job and it is decided
-from cross-session trust in about a millisecond, no LLM. On-chain provider
+from cross-session trust, no LLM, at the latencies above. On-chain provider
 registration is **not** complete: the agent's ERC-4337 smart account has no
 code deployed on Base mainnet or Sepolia yet, so `/api/v1/vigil/acp/status`
 reports `identity_configured: true, registered: false`. It flips on its own

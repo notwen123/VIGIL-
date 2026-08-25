@@ -7,8 +7,8 @@
 // this package points it outward.
 //
 // An arriving ACP job carries a buyer agent id. VIGIL recalls that id from
-// the same local trust store the firewall uses (one SQLite file, ~1ms, no
-// inference), and answers:
+// the same trust store the firewall uses — no inference on any path — and
+// answers:
 //
 //	trust >= 70   ALLOW   serve the job
 //	trust <  30   BLOCK   refuse, citing the recalled history
@@ -71,9 +71,10 @@ type Decision struct {
 	PriorBlocks  int     `json:"prior_blocks"`
 	RecallMS     float64 `json:"recall_ms"`
 	DecidedAt    string  `json:"decided_at"`
-	// Source names what produced the verdict. Always local memory here:
-	// an ACP decision that required an LLM round-trip would be too slow and
-	// too expensive to sit in a marketplace request path.
+	// Source names what produced the verdict, including which backend the
+	// memory service reports. Never a model: an ACP decision that required
+	// an LLM round-trip would be too slow and too expensive to sit in a
+	// marketplace request path.
 	Source string `json:"source"`
 }
 
@@ -90,6 +91,8 @@ type Service struct {
 	// deployedKnown is set only once a positive answer is seen.
 	deployed      bool
 	deployedKnown bool
+	// source caches the provenance label, which names the memory backend.
+	source string
 }
 
 // New builds the ACP service.
@@ -204,6 +207,44 @@ func (s *Service) accountDeployed() (bool, error) {
 	return deployed, nil
 }
 
+// sourceLabel names what produced the verdict, reporting the backend the
+// memory service actually reports rather than the one the code was written
+// against.
+//
+// This was hardcoded to "local sqlite". That is true of the repo's
+// services/sibyl-memory (SQLite + FTS5) and false of the hosted deployment,
+// which answers `"backend": "postgresql"` — so every production decision
+// carried a provenance string naming a database it had not touched. A
+// verdict's stated source is evidence; evidence that is decorative is worse
+// than none.
+//
+// Cached because the backend cannot change under a running process, and the
+// label is built per decision on the request path.
+func (s *Service) sourceLabel() string {
+	s.mu.Lock()
+	if s.source != "" {
+		v := s.source
+		s.mu.Unlock()
+		return v
+	}
+	s.mu.Unlock()
+
+	backend := "unknown backend"
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if h, err := s.sibyl.Health(ctx); err == nil {
+		if b, ok := h["backend"].(string); ok && b != "" {
+			backend = b
+		}
+	}
+	label := fmt.Sprintf("sibyl_memory(%s, no llm)", backend)
+
+	s.mu.Lock()
+	s.source = label
+	s.mu.Unlock()
+	return label
+}
+
 // Status describes the provider for the dashboard and /vigil/acp/status.
 func (s *Service) Status() map[string]any {
 	if s == nil {
@@ -233,7 +274,7 @@ func (s *Service) Evaluate(ctx context.Context, job Job) (Decision, error) {
 		JobID:        job.JobID,
 		BuyerAgentID: job.BuyerAgentID,
 		DecidedAt:    time.Now().UTC().Format(time.RFC3339),
-		Source:       "sibyl_memory(local sqlite, no llm)",
+		Source:       s.sourceLabel(),
 	}
 
 	if !s.sibyl.Configured() {
