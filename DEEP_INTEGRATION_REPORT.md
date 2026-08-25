@@ -380,7 +380,7 @@ because trust is a keyed row and not replayed history.
    BLOCK at 10, across the ladder at `sibyl_trust.go:98/103/106`, and
    surviving a process kill. **DEEP.**
 3. **"Reputation across a marketplace."** Code is present and reads real
-   memory (`pkg/acp/service.go:157`), but `pkg/acp` has **no test files**
+   memory (`pkg/acp/service.go:289`), but `pkg/acp` has **no test files**
    (`go test ./pkg/acp/... → ? [no test files]`) and no ACP job has been run.
    The claim is architecturally sound and behaviourally unexercised.
    **PARTIAL.**
