@@ -92,7 +92,7 @@ services:
       - key: OTEL_EXPORTER_OTLP_HEADERS
         sync: false
 
-  # ── 2. Sibyl Memory service (Python/FastAPI + SQLite on persistent disk) ──────
+  # ── 2. Sibyl Memory service (Python/FastAPI + PostgreSQL via Supabase) ──────
   - type: web
     name: vigil-sibyl-memory
     env: docker
@@ -100,17 +100,13 @@ services:
     region: oregon
     plan: free
     healthCheckPath: /health
-    disk:
-      name: vigil-memory-disk
-      mountPath: /data
-      sizeGB: 1
     envVars:
-      - key: SIBYL_DB_PATH
-        value: "/data/memory.db"
+      # Supabase direct connection (bypasses PgBouncer — needed for CREATE TABLE)
+      - key: SIBYL_DATABASE_URL
+        sync: false
       - key: SIBYL_HOST
         value: "0.0.0.0"
       - key: SIBYL_PORT
         value: "8787"
       - key: SIBYL_TENANT_ID
         value: "00000000-0000-0000-0000-000000000001"
-
