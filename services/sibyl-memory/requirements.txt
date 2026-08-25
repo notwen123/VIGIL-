@@ -1,9 +1,14 @@
-# VIGIL MEMORY — Sibyl memory service (PostgreSQL backend).
+# VIGIL MEMORY — Sibyl memory service.
 #
-# Rewritten to use Supabase PostgreSQL instead of SQLite/sibyl_memory_client.
-# No disk required. No new accounts. Uses the existing Supabase DB.
-psycopg2-binary==2.9.10
+# Two backends, one schema. SQLite (Python stdlib) runs offline with no
+# credentials, which is what the demo and the deletion test need. PostgreSQL
+# is the hosted deployment: Render's free tier has an ephemeral filesystem, so
+# a SQLite file there would be erased on every redeploy.
 
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.4
+
+# Only needed when SIBYL_DATABASE_URL is set. The service imports it lazily,
+# so a local SQLite run does not require it to be installed.
+psycopg2-binary==2.9.10

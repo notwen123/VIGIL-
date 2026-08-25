@@ -1,8 +1,20 @@
 """Sibyl Memory service — VIGIL's cross-session trust memory.
 
-Rewritten to use PostgreSQL (Supabase) instead of SQLite/sibyl_memory_client.
-Same HTTP API, same five-tier schema — no disk, no card, no new accounts.
-Set SIBYL_DATABASE_URL (or DATABASE_URL) to your Supabase direct connection string.
+One HTTP API and one five-tier schema over two interchangeable backends:
+
+  PostgreSQL   when SIBYL_DATABASE_URL (or DATABASE_URL) is set.
+               This is the hosted deployment. Render's free tier has an
+               ephemeral filesystem, so a SQLite file there would be erased
+               on every restart and redeploy — which for a service whose
+               entire claim is "memory survives a restart" would be fatal.
+               Supabase gives durable storage with no disk to pay for.
+
+  SQLite       otherwise, at SIBYL_DB_PATH. This is what runs on a laptop
+               with no account, no network and no credentials, and it is
+               what makes ./demo/memory_demo.sh and the deletion test
+               reproducible by anyone who clones this repository.
+
+Both are load-bearing. Neither is a fallback for the other.
 
 Five tiers:
   sibyl_entities/  WARM      durable agent/tool/policy trust records
@@ -17,38 +29,196 @@ from __future__ import annotations
 import json
 import os
 import time
+from pathlib import Path
 from typing import Any
 
-import psycopg2
-import psycopg2.extras
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 DATABASE_URL = os.environ.get("SIBYL_DATABASE_URL") or os.environ.get("DATABASE_URL")
+DB_PATH = os.environ.get("SIBYL_DB_PATH", "~/.sibyl-memory/memory.db")
 TENANT_ID = os.environ.get("SIBYL_TENANT_ID", "00000000-0000-0000-0000-000000000001")
+
+# Two backends, one schema, chosen by whether a Postgres URL is present.
+#
+# Postgres is the hosted deployment (Supabase, no disk to manage). SQLite is
+# what runs on a laptop with no account and no network, which is not a
+# convenience — it is what makes `./demo/memory_demo.sh` and the deletion test
+# reproducible by anyone who clones this repository. When the service became
+# Postgres-only, that demo stopped starting at all, and a proof nobody else
+# can run is not a proof.
+#
+# The difference is confined to this block. All twenty-five call sites below
+# are written once, in psycopg2's dialect, and the SQLite side adapts.
+SQLITE = not DATABASE_URL
+BACKEND = "sqlite" if SQLITE else "postgresql"
+
+if SQLITE:
+    import sqlite3
+else:
+    import psycopg2
+    import psycopg2.extras
 
 app = FastAPI(
     title="Sibyl Memory (VIGIL)",
-    description="Cross-session trust memory for VIGIL — PostgreSQL backend.",
-    version="2.0.0",
+    description=(
+        "Cross-session trust memory for VIGIL. "
+        "SQLite on local disk, PostgreSQL when SIBYL_DATABASE_URL is set."
+    ),
+    version="2.1.0",
 )
 
 _conn = None
 
 
+class _SqliteCursor:
+    """A psycopg2-shaped cursor over sqlite3.
+
+    Three differences to paper over, and only three: the parameter marker is
+    `?` rather than `%s`, rows are tuples rather than mappings, and a cursor
+    is not a context manager. Everything else in the SQL — ON CONFLICT DO
+    UPDATE, RETURNING — SQLite has supported since 3.35.
+    """
+
+    def __init__(self, cur): self._cur = cur
+    def __enter__(self): return self
+    def __exit__(self, *exc): self._cur.close(); return False
+
+    def execute(self, sql, params=()):
+        # %s -> ?, and now() -> CURRENT_TIMESTAMP. Both are Postgres
+        # spellings the call sites use; neither exists in SQLite.
+        sql = sql.replace("%s", "?").replace("now()", "CURRENT_TIMESTAMP")
+        # psycopg2 adapts a Python list into a Postgres TEXT[]; sqlite3 refuses
+        # to bind one at all ("type 'list' is not supported"). Encoding here —
+        # and decoding again in _row — is what keeps the COLD journal writable
+        # on both backends without touching the call sites.
+        params = tuple(
+            json.dumps(v) if isinstance(v, (list, dict)) else v for v in params
+        )
+        return self._cur.execute(sql, params)
+
+    # Columns that are JSONB in Postgres, where psycopg2 hands back a parsed
+    # object. SQLite stores them as TEXT, so without this the same endpoint
+    # would return a dict on one backend and a JSON string on the other — and
+    # the Go client, which unmarshals trust from `body`, would fail on one of
+    # them. The wire format has to be identical or the backends are not
+    # interchangeable.
+    _JSON_COLS = ("body", "extra", "metadata", "acted", "evaluated", "forward")
+
+    def _row(self, r):
+        if r is None:
+            return None
+        d = dict(r)
+        for col in self._JSON_COLS:
+            v = d.get(col)
+            if isinstance(v, str):
+                try:
+                    d[col] = json.loads(v)
+                except (ValueError, TypeError):
+                    pass  # a genuine string column, e.g. reference body
+        return d
+
+    def fetchone(self): return self._row(self._cur.fetchone())
+    def fetchall(self): return [self._row(r) for r in self._cur.fetchall()]
+
+    def __getattr__(self, name): return getattr(self._cur, name)
+
+
+class _SqliteConn:
+    """Wraps sqlite3.Connection so `with conn.cursor() as cur` works."""
+
+    def __init__(self, raw): self._raw = raw
+    @property
+    def closed(self): return False
+    def cursor(self): return _SqliteCursor(self._raw.cursor())
+    def commit(self): self._raw.commit()
+    def rollback(self): self._raw.rollback()
+
+
 def db():
     global _conn
     if _conn is None or _conn.closed:
-        if not DATABASE_URL:
-            raise RuntimeError("SIBYL_DATABASE_URL or DATABASE_URL not set")
-        _conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
-        _conn.autocommit = False
+        if SQLITE:
+            path = Path(DB_PATH).expanduser()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            raw = sqlite3.connect(str(path), check_same_thread=False)
+            raw.row_factory = sqlite3.Row
+            # WAL keeps a reader from blocking the writer, which matters
+            # because the firewall reads on the hot path while the same
+            # process is journalling decisions behind it.
+            raw.execute("PRAGMA journal_mode=WAL")
+            _conn = _SqliteConn(raw)
+        else:
+            _conn = psycopg2.connect(
+                DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor
+            )
+            _conn.autocommit = False
         _ensure_schema(_conn)
     return _conn
 
 
 def _ensure_schema(conn) -> None:
-    """Create all five tier tables if they don't exist. Idempotent."""
+    """Create all five tier tables if they don't exist. Idempotent.
+
+    The two dialects differ only in column types and the autoincrement
+    spelling. SQLite has no JSONB and no array type, so both become TEXT
+    holding JSON — which is what the code already writes, since every body is
+    passed through json.dumps() before it reaches a placeholder.
+    """
+    if SQLITE:
+        ddl = """
+        CREATE TABLE IF NOT EXISTS sibyl_entities (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id   TEXT NOT NULL,
+            category    TEXT NOT NULL,
+            name        TEXT NOT NULL,
+            body        TEXT NOT NULL DEFAULT '{}',
+            status      TEXT,
+            created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (tenant_id, category, name)
+        );
+        CREATE TABLE IF NOT EXISTS sibyl_state (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id   TEXT NOT NULL,
+            key         TEXT NOT NULL,
+            body        TEXT NOT NULL DEFAULT '{}',
+            updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (tenant_id, key)
+        );
+        CREATE TABLE IF NOT EXISTS sibyl_journal (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id   TEXT NOT NULL,
+            acted       TEXT,
+            evaluated   TEXT,
+            forward     TEXT,
+            extra       TEXT,
+            created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS sibyl_reference (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id   TEXT NOT NULL,
+            key         TEXT NOT NULL,
+            body        TEXT NOT NULL,
+            metadata    TEXT,
+            updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (tenant_id, key)
+        );
+        CREATE TABLE IF NOT EXISTS sibyl_archive (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id      TEXT NOT NULL,
+            category       TEXT NOT NULL,
+            name           TEXT NOT NULL,
+            body           TEXT NOT NULL DEFAULT '{}',
+            archive_reason TEXT,
+            archived_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+        raw = conn._raw
+        raw.executescript(ddl)
+        conn.commit()
+        return
+
     with conn.cursor() as cur:
         cur.execute("""
         CREATE TABLE IF NOT EXISTS sibyl_entities (
@@ -167,7 +337,7 @@ def health() -> dict[str, Any]:
             row = cur.fetchone()
         return {
             "status": "ok",
-            "backend": "postgresql",
+            "backend": BACKEND,
             "vectors": False,
             "tenant_id": TENANT_ID,
             "warm_entities": row["c"] if row else 0,
@@ -419,7 +589,7 @@ def stats() -> dict[str, Any]:
         "warm_by_category": by_cat,
         "cold_events": cold,
         "archived_entities": archived,
-        "backend": "postgresql",
+        "backend": BACKEND,
         "vectors": 0,
         "db_bytes": 0,
     }
