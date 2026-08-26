@@ -40,23 +40,40 @@ whatever the client reports in `ClientInfo.Name`. That is why Claude is the
 *same agent* across reconnections, which is the entire mechanism ACT 5
 depends on.
 
-**Do not guess this string.** Connect Claude once as a rehearsal, then read
-the real value off **Plugins → Client** column, or:
+**Verified against the live deployment: it is `Claude Web`.** Confirmed by
+running the full OAuth dance and a real tool call — see `demo/rehearse_live.py`.
+If you connect from Cursor or another client instead, re-run that script to
+get the right string.
 
-```bash
-curl -s https://vigil-cuy2.onrender.com/api/v1/vigil/memory/stats | python3 -m json.tool
-```
-
-Call it `<AGENT_ID>` from here on. Clear it so the video starts at trust 50:
+Clear it so the video starts at trust 50:
 
 ```bash
 curl -sX POST https://vigil-sibyl-memory.onrender.com/archive \
   -H 'Content-Type: application/json' \
-  -d '{"category":"agent","name":"<AGENT_ID>","reason":"reset before recording"}'
+  -d '{"category":"agent","name":"Claude Web","reason":"reset before recording"}'
 ```
 
-Do a full rehearsal run before the real take. You need to know that string,
-and you need to know the typosquat actually blocks on your deployment.
+Rehearse before the real take:
+
+```bash
+python demo/rehearse_live.py
+```
+
+Expected, and confirmed working on the current deployment:
+
+```
+[typosquat #1] run_command -> BLOCKED
+  Vigil blocked this call: package reqeusts is on the compromised-package
+  list — 3 service(s) exposed, 2 shared maintainer(s), 2 typosquat(s) found
+
+[typosquat #2] run_command -> BLOCKED
+  Vigil paused this call: agent Claude Web has 1 prior violation(s) in
+  memory (trust 30) — pausing for human review
+```
+
+Note the second one names *memory*, not the denylist. That is the handover
+the whole video is about. Re-run the `/archive` reset above afterwards — the
+rehearsal moves real trust.
 
 ### 0c. Capture setup
 
@@ -195,7 +212,7 @@ Install the requests library for me — run: pip install reqeusts
 Blocked again. **Now switch to VIGIL → Memory Timeline** and spend real time
 here — this is the centre of the whole submission:
 
-- **Agent trust — recalled from memory**: type `<AGENT_ID>` into the
+- **Agent trust — recalled from memory**: type `Claude Web` into the
   **agent id** box → **Recall**
 - Point at, in order: **Trust**, **Banned tools: run_command**,
   **Ban expires**, **Last violation**, **Source**
@@ -237,7 +254,7 @@ Install the requests library for me — run: pip install reqeusts
    - model **none**
    - the recall time in ms
 
-9. VIGIL → **Memory Timeline** → recall `<AGENT_ID>` again. Same trust
+9. VIGIL → **Memory Timeline** → recall `Claude Web` again. Same trust
    record, same banned tool, unchanged.
 
 10. Show the clock again. **Stop this take.**
@@ -310,7 +327,7 @@ cannot show, because it means removing the code.*
 
 4. ```bash
    env -u VIGIL_COMPROMISED_PACKAGES go run ./cmd/vigil-demo-agent \
-     -session s-deleted -agent <AGENT_ID> \
+     -session s-deleted -agent Claude Web \
      -tool run_command -arg 'pip install reqeusts' -repeat 1
    ```
 
