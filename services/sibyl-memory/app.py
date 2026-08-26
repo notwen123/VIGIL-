@@ -432,6 +432,46 @@ def archive(b: ArchiveBody) -> dict[str, Any]:
     return {"ok": True, "archived": archived, "latency_ms": _ms(started)}
 
 
+@app.post("/forget")
+def forget(b: ArchiveBody) -> dict[str, Any]:
+    """Erase an entity from the active set AND the archive.
+
+    The only way to lift a ban. Without it a ban is permanent, because
+    /recall falls back to the archive on purpose — archiving an agent must
+    not un-ban it. That is correct for a sanction and wrong as the whole
+    story: one false positive would blacklist a legitimate agent forever,
+    with no operator action able to reverse it.
+
+    Deliberately separate from /archive, and deliberately not called by the
+    firewall. Nothing in the enforcement path forgets anything on its own —
+    forgetting is an operator decision, and it leaves the COLD journal
+    intact, so the record that the agent *was* banned survives even though
+    the ban itself does not.
+    """
+    started = time.perf_counter()
+    conn = db()
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM sibyl_entities WHERE tenant_id=%s AND category=%s AND name=%s",
+            (TENANT_ID, b.category, b.name),
+        )
+        live = cur.rowcount
+        cur.execute(
+            "DELETE FROM sibyl_archive WHERE tenant_id=%s AND category=%s AND name=%s",
+            (TENANT_ID, b.category, b.name),
+        )
+        archived = cur.rowcount
+    conn.commit()
+    return {
+        "ok": True,
+        "category": b.category,
+        "name": b.name,
+        "removed": {"active": live, "archived": archived},
+        "note": "journal entries are kept; only the trust record is gone",
+        "latency_ms": _ms(started),
+    }
+
+
 @app.post("/set_state")
 def set_state(b: StateBody) -> dict[str, Any]:
     """HOT tier. Per-session scratch, rewritten in place every tool call."""

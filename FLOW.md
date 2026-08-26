@@ -45,12 +45,22 @@ running the full OAuth dance and a real tool call — see `demo/rehearse_live.py
 If you connect from Cursor or another client instead, re-run that script to
 get the right string.
 
-Clear it so the video starts at trust 50:
+Clear it so the video starts at trust 50. Use `/forget`, not `/archive` —
+archiving a banned agent deliberately does *not* un-ban it, because `/recall`
+falls back to the archive:
 
 ```bash
-curl -sX POST https://vigil-sibyl-memory.onrender.com/archive \
+curl -sX POST https://vigil-sibyl-memory.onrender.com/forget \
   -H 'Content-Type: application/json' \
   -d '{"category":"agent","name":"Claude Web","reason":"reset before recording"}'
+```
+
+Confirm it worked — this must print `False`:
+
+```bash
+curl -s -X POST https://vigil-sibyl-memory.onrender.com/recall \
+  -H 'Content-Type: application/json' \
+  -d '{"category":"agent","name":"Claude Web"}' | python3 -c "import json,sys;print(json.load(sys.stdin)['found'])"
 ```
 
 Rehearse before the real take:
