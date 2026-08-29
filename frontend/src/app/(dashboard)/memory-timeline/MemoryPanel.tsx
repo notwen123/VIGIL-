@@ -82,9 +82,26 @@ export function MemoryPanel() {
   const [recall, setRecall] = useState<AgentRecall | null>(null)
   const [recallErr, setRecallErr] = useState<string | null>(null)
 
+  // Consecutive failed health polls. A single miss is not an outage: both
+  // services are on a free tier that sleeps, so a cold start returns 502 and
+  // a burst of polls can earn a 429 — neither of which means enforcement
+  // stopped. Flipping the banner on the first failure cried wolf on a
+  // perfectly healthy system, and an alarm that fires on nothing is an alarm
+  // nobody reads when it matters.
+  const [misses, setMisses] = useState(0)
+  const OUTAGE_AFTER = 3
+
   const refresh = async () => {
     const h = await j('/api/v1/vigil/memory/health')
-    setHealth(h.body)
+    if (h.ok) {
+      setHealth(h.body)
+      setMisses(0)
+    } else {
+      // Keep the last known good health rather than overwriting it with an
+      // error body. The distinction the rest of this codebase draws between
+      // "unreachable" and "unenforced" has to survive into the UI.
+      setMisses((n) => n + 1)
+    }
     const s = await j('/api/v1/vigil/memory/stats')
     if (s.ok) setStats(s.body)
     const a = await j('/api/v1/vigil/acp/jobs')
@@ -99,45 +116,81 @@ export function MemoryPanel() {
     if (!r.ok) {
       setRecall(null)
       setRecallErr(r.body?.error || 'trust_score unavailable')
-      return
+      return false
     }
     setRecall(r.body)
+    return true
   }
 
   useEffect(() => {
     refresh()
-    lookup(agentId)
-    const t = setInterval(refresh, 5000)
+    // Retry the first lookup once. On a cold free-tier service the initial
+    // recall can 502 or 429, and the error it leaves behind is sticky until
+    // the operator clicks Recall — so the panel would sit there showing
+    // "trust_score unavailable" about a service that had already come up.
+    lookup(agentId).then((ok) => {
+      if (!ok) setTimeout(() => lookup(agentId), 4000)
+    })
+    // 15s, not 5s. Four endpoints per tick against two free-tier services
+    // was enough to earn a 429 on its own.
+    const t = setInterval(refresh, 15000)
     return () => clearInterval(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const enforcing = health?.enforcing === true
+  // Unreachable is a third state, not a synonym for unenforced. Only call it
+  // an outage once the service has missed several polls in a row.
+  const unreachable = misses > 0 && misses < OUTAGE_AFTER
+  const outage = misses >= OUTAGE_AFTER
 
   return (
     <div className="space-y-6">
       {/* The banner that must never be subtle. */}
       <div
         className={`card p-5 border-l-4 ${
-          enforcing ? 'border-l-green-500' : 'border-l-red-500 bg-red-50'
+          outage
+            ? 'border-l-red-500 bg-red-50'
+            : unreachable
+              ? 'border-l-amber-500 bg-amber-50'
+              : enforcing
+                ? 'border-l-green-500'
+                : 'border-l-red-500 bg-red-50'
         }`}
       >
         <div className="flex items-start gap-3">
-          {enforcing ? (
-            <ShieldCheck className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+          {enforcing && !outage ? (
+            <ShieldCheck
+              className={`w-5 h-5 mt-0.5 shrink-0 ${unreachable ? 'text-amber-600' : 'text-green-600'}`}
+            />
           ) : (
             <ShieldAlert className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
           )}
           <div className="flex-1">
-            <h2 className={`text-sm font-semibold ${enforcing ? 'text-gray-900' : 'text-red-800'}`}>
-              {enforcing
-                ? 'Cross-session enforcement is ON'
-                : 'Cross-session enforcement is OFF — repeat offenders will NOT be blocked'}
+            <h2
+              className={`text-sm font-semibold ${
+                outage ? 'text-red-800' : unreachable ? 'text-amber-800' : enforcing ? 'text-gray-900' : 'text-red-800'
+              }`}
+            >
+              {outage
+                ? 'Cross-session enforcement is OFF — repeat offenders will NOT be blocked'
+                : unreachable
+                  ? `Reconnecting to the memory service — ${misses} missed check${misses > 1 ? 's' : ''}`
+                  : enforcing
+                    ? 'Cross-session enforcement is ON'
+                    : 'Cross-session enforcement is OFF — repeat offenders will NOT be blocked'}
             </h2>
-            {enforcing ? (
+            {unreachable && !outage ? (
+              <p className="text-xs text-amber-700 mt-1">
+                Showing the last confirmed state. Enforcement is unchanged — the dashboard just
+                could not reach the service on this poll. It is reported as an outage after{' '}
+                {OUTAGE_AFTER} consecutive misses.
+              </p>
+            ) : enforcing ? (
               <p className="text-xs text-gray-500 mt-1 font-mono">
-                {health?.backend} · {health?.db_path} · {(health?.db_bytes ?? 0).toLocaleString()} bytes ·
-                vectors: {String(health?.vectors)}
+                {health?.backend}
+                {health?.db_path ? ` · ${health.db_path}` : ''} ·{' '}
+                {(health?.db_bytes ?? 0).toLocaleString()} bytes · vectors: {String(health?.vectors)}
               </p>
             ) : (
               <>
@@ -166,7 +219,9 @@ export function MemoryPanel() {
           <p className="text-xl font-bold mt-1 text-gray-900">
             {stats ? `${Math.round(stats.db_bytes / 1024)}KB` : '—'}
           </p>
-          <p className="text-[10px] text-gray-400 mt-1">single SQLite file</p>
+          <p className="text-[10px] text-gray-400 mt-1">
+            {health?.backend === 'postgresql' ? 'PostgreSQL' : 'single SQLite file'}
+          </p>
         </div>
         <div className="stat-card">
           <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wider">Vectors</p>
